@@ -20,7 +20,7 @@ At the operating points below, MI355X leads on tokens per dollar, and against B3
 | GB200 NVL72 (Dynamo vLLM), $4 | 152.7 vs. 135.0 | 10.2M vs. 2.7M (**3.8×**) | 8.2k vs. 3.0k (**2.7×**) |
 | GB300 NVL72 (Dynamo SGLang), $5 | 152.7 vs. 146.0 | 10.2M vs. 8.9M (**1.15×**) | — |
 
-Rows are paired by P90 interactivity, not by concurrency; the two sides may run on different numbers of chips. By row, the concurrency is c256 vs. c128, c32 vs. c16, c48 vs. c8, c16 vs. c4 and c16 vs. c8 (MI355X vs. NVIDIA). The MI355X points come from the [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1); the NVIDIA points are the latest dashboard runs as of 2026-09-25: B300 from 2026-09-15, GB200 NVL72 from 2026-08-18 and GB300 NVL72 from 2026-09-10. Against GB300 NVL72 the lead is in tokens per dollar only.
+The MI355X points come from the [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1); the NVIDIA points are the latest dashboard runs as of 2026-09-25: B300 from 2026-09-15, GB200 NVL72 from 2026-08-18 and GB300 NVL72 from 2026-09-10. Against GB300 NVL72 the lead is in tokens per dollar only.
 
 The rest of this post covers in detail how UMBP produces that result.
 

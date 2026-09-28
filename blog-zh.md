@@ -20,7 +20,7 @@ agentic（智能体）应用其多轮会话的特点使得服务成本极大取�
 | GB200 NVL72（Dynamo vLLM），$4 | 152.7 vs. 135.0 | 1020 万 vs. 270 万（**3.8×**） | 8.2k vs. 3.0k（**2.7×**） |
 | GB300 NVL72（Dynamo SGLang），$5 | 152.7 vs. 146.0 | 1020 万 vs. 890 万（**1.15×**） | — |
 
-各行按 P90 交互速度配对，而不是按并发配对；两边使用的芯片数可能不同。各行对应的并发依次为 c256 vs. c128、c32 vs. c16、c48 vs. c8、c16 vs. c4、c16 vs. c8（MI355X vs. NVIDIA）。MI355X 各点取自 [9 月 25 日 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1)；NVIDIA 各点取自截至 2026-09-25 dashboard 上的最新 run：B300 为 2026-09-15，GB200 NVL72 为 2026-08-18，GB300 NVL72 为 2026-09-10。对 GB300 NVL72 的领先只体现在每美元 token 产出上。
+MI355X 各点取自 [9 月 25 日 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1)；NVIDIA 各点取自截至 2026-09-25 dashboard 上的最新 run：B300 为 2026-09-15，GB200 NVL72 为 2026-08-18，GB300 NVL72 为 2026-09-10。对 GB300 NVL72 的领先只体现在每美元 token 产出上。
 
 
 下面本文会详细讲 UMBP 如何做到这个结果。
