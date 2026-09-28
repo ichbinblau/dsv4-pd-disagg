@@ -72,7 +72,7 @@ TTFT 的下降来自在一个 96% 前缀复用的负载上**不再重算前缀**
 
 ![图 2](figures/fig3_umbp_tp4_prefill.png)
 
-*图 2：左：在 UMBP linker 下，TP4 prefill 的每个 prompt token 的 KV 来自哪里 —— GPU HBM 前缀缓存、UMBP DRAM 层，还是重算。并发越高、HBM 驱逐越多，差额就由 DRAM 层补上。右：9 月 15 日 recipe（TP8 prefill + TP8 decode，16 卡）与 9 月 23 日 recipe（TP4 prefill + UMBP + TP8 decode，12 卡）的单卡吞吐对比。9 月 23 日的分支还包含乐观 prefill 和 SGLang v0.5.20 镜像；并发 16 另外用了 DSpark γ=6。*
+*图 2：左：在 UMBP linker 下，TP4 prefill 的每个 prompt token 的 KV 来自哪里 —— GPU HBM 前缀缓存、UMBP DRAM 层，还是重算。并发越高、HBM 驱逐越多，差额就由 DRAM 层补上。右：9 月 15 日 recipe（TP8 prefill + TP8 decode，16 卡）与 9 月 25 日 recipe（TP4 prefill + UMBP + TP8 decode，12 卡）的单卡吞吐对比。9 月 25 日的分支还包含乐观 prefill 和 SGLang v0.5.20 镜像；并发 16 另外用了 DSpark γ=6。*
 
 代价是 prefill 变慢：prefill 的卡减半后，并发 16–48 的 P90 TTFT 上升 26–53%（2.2–3.6 秒 → 2.7–5.6 秒）。对于智能体要等完整回复、TTFT 只占其中一小部分的场景，我们愿意用这个代价，换在固定单用户 decode 速度下更高的单卡吞吐。
 
@@ -105,7 +105,7 @@ TTFT 的下降来自在一个 96% 前缀复用的负载上**不再重算前缀**
 
 **二是纵向对比我们自己一个月前。** 同一套基准、同样并发 192：
 
-| 指标 | 8 月 21 日 | 9 月 23 日 | 变化 |
+| 指标 | 8 月 21 日 | 9 月 25 日 | 变化 |
 |---|---|---|---|
 | 单卡吞吐 | 22.9k tok/s | 46.6k tok/s | **2.03×** |
 | P90 TTFT | 33.6 s | 11.8 s | **–65%** |
