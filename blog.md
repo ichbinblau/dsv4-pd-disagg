@@ -70,7 +70,7 @@ The TTFT reduction comes from eliminating prefix recomputation on a workload wit
 
 ![Figure 2](figures/fig3_umbp_tp4_prefill.png)
 
-*Figure 2: Left: where the TP4 prefill finds the KV for each prompt token under the UMBP linker — GPU HBM prefix cache, UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the Sep 15 recipe (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark γ=6.*
+*Figure 2: Left: where the TP4 prefill finds the KV for each prompt token under the UMBP linker — GPU HBM prefix cache, UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark γ=6.*
 
 The trade-off is prefill time. With half the prefill GPUs, P90 TTFT at concurrency 16–48 rises by 26–53% (2.2–3.6 s → 2.7–5.6 s). For agentic workloads, where the agent waits for the full response and TTFT is a small fraction of it, we take that trade for more throughput per GPU at a fixed per-user decode speed.
 
