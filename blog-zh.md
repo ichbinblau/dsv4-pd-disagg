@@ -1,14 +1,26 @@
-# UMBP 让 AMD Instinct™ MI355X 在公开权威的 AgentX 排行榜上击败 NVIDIA B200 Dynamo SGLang，取得 1.5 倍于对手的每美元 TCO 产出
+# MoRI UMBP 助力 AMD Instinct™ MI355X 在公开的 AgentX 排行榜上展现每美元 token 的 TCO 领先优势
 
 *2026 年 9 月*
 
 agentic（智能体）应用其多轮会话的特点使得服务成本极大取决于服务端能重用KV cache来避免重算。
 
-我们今年 7 月与 Moonshot AI 联合发表的 [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html) 隆重推出了 **UMBP**（Unified Memory & Bandwidth Pool，统一内存与带宽池）。UMBP 是 AMD MoRI 团队从 agentic 场景出发、遵循第一性原理、专为 AMD 平台打造的 KV cache 基础设施，近一个月我们把这套成果贡献到 SGLang 社区，作为全新 KVCache Store Linker 的后端接入开源生态，让更广泛的生态用户都能受益。在 SemiAnalysis 的公开 AgentX 基准、DeepSeek-V4-Pro-0813 1.6T 模型上，AMD MI355X上通过MoRI disagg，配备 UMBP 做统一kvcache池， 叠加AMD一直以来在SGLang社区不断的优化， 达到 **峰值每 1 美元 TCO 产出 6900 万 token，而 B200 跑 Dynamo SGLang 是 4600 万 —— 每美元 token 产出领先 1.5×**（SemiAnalysis Rent / 三年承诺 成本档位，B200 为 $3.7/chip/hr，MI355X 为 $2.9/chip/hr，数据截至 2026-09-25）。
+我们今年 7 月与 Moonshot AI 联合发表的 [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html) 隆重推出了 **UMBP**（Unified Memory & Bandwidth Pool，统一内存与带宽池）。UMBP 是 AMD MoRI 团队从 agentic 场景出发、遵循第一性原理、专为 AMD 平台打造的 KV cache 基础设施，近一个月我们把这套成果贡献到 SGLang 社区，作为全新 KVCache Store Linker 的后端接入开源生态，让更广泛的生态用户都能受益。在 SemiAnalysis 的公开 AgentX 基准、DeepSeek-V4-Pro-0813 1.6T 模型上，AMD MI355X上通过MoRI disagg，配备 UMBP 做统一kvcache池， 叠加AMD一直以来在SGLang社区不断的优化， 已**在部分工作点上超过 NVIDIA GB200 NVL72、B300 和 GB300 NVL72**，峰值达到**每 1 美元 TCO 产出 6900 万 token**（SemiAnalysis Rent / 三年承诺 成本档位，MI355X 为 $2.9/chip/hr，数据截至 2026-09-25）。
 
 ![图 1](figures/fig1_tco_vs_b200.png)
 
-*图 1：DeepSeek-V4-Pro-0813 1.6T 在 agentic 场景下的「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，取自公开的 SemiAnalysis InferenceX dashboard（Rent / 三年承诺 档位，更新于 2026-09-25）。红色是 MI355X FP4 + UMBP + MoRI + SGLang；绿色系是 NVIDIA 阵营 —— B200、B300、H200、GB200、GB300 NVL72，以及一条 Vera Rubin NVL72 的预览曲线。越靠右上越好，标签是各点的并行布局。对比 B200 FP4（Dynamo SGLang），MI355X 的峰值是每 1 美元 TCO 6900 万 token，B200 为 4600 万。*
+*图 1：DeepSeek-V4-Pro-0813 1.6T 在 agentic 场景下的「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，取自公开的 SemiAnalysis InferenceX dashboard（Rent / 三年承诺 档位，更新于 2026-09-25）。红色是 MI355X FP4 + UMBP + MoRI + SGLang；绿色系是 NVIDIA 阵营 —— B200、B300、H200、GB200、GB300 NVL72，以及一条 Vera Rubin NVL72 的预览曲线。越靠右上越好，标签是各点的并行布局。*
+
+在下列工作点上，MI355X 的每美元 token 产出领先；对 B300 和 GB200 NVL72，单卡吞吐也领先。每一行都把 MI355X 的一个点与 P90 交互速度相同或更低的 NVIDIA 实测点配对，所以每一行里 MI355X 的单用户速度都不低于对手。
+
+| NVIDIA 系统（dashboard 曲线，$/chip/hr） | P90 交互速度，tok/s/用户（MI355X vs. NVIDIA） | 每 1 美元 TCO 的 token 数（MI355X vs. NVIDIA） | 单卡吞吐，tok/s（MI355X vs. NVIDIA） |
+|---|---|---|---|
+| B300（SGLang），$4.25 | 54.1 vs. 53.9 | 6930 万 vs. 4190 万（**1.65×**） | 55.8k vs. 49.5k（**1.13×**） |
+| B300（SGLang），$4.25 | 115.9 vs. 104.8 | 1980 万 vs. 1030 万（**1.93×**） | 15.9k vs. 12.1k（**1.32×**） |
+| GB200 NVL72（Dynamo vLLM），$4 | 102.5 vs. 84.7 | 2660 万 vs. 470 万（**5.6×**） | 21.4k vs. 5.3k（**4.1×**） |
+| GB200 NVL72（Dynamo vLLM），$4 | 152.7 vs. 135.0 | 1020 万 vs. 270 万（**3.8×**） | 8.2k vs. 3.0k（**2.7×**） |
+| GB300 NVL72（Dynamo SGLang），$5 | 152.7 vs. 146.0 | 1020 万 vs. 890 万（**1.15×**） | — |
+
+各行按 P90 交互速度配对，而不是按并发配对；两边使用的芯片数可能不同。各行对应的并发依次为 c256 vs. c128、c32 vs. c16、c48 vs. c8、c16 vs. c4、c16 vs. c8（MI355X vs. NVIDIA）。MI355X 各点取自 [9 月 25 日 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1)；NVIDIA 各点取自截至 2026-09-25 dashboard 上的最新 run：B300 为 2026-09-15，GB200 NVL72 为 2026-08-18，GB300 NVL72 为 2026-09-10。对 GB300 NVL72 的领先只体现在每美元 token 产出上。
 
 
 下面本文会详细讲 UMBP 如何做到这个结果。
@@ -68,7 +80,7 @@ Linker + UMBP 把上面六个问题全部解决了：
 
 TTFT 的下降来自在一个 96% 前缀复用的负载上**不再重算前缀**，没有任何 kernel 改动参与其中。
 
-**缓存够大，拓扑就能改。** 有了这层去重的 DRAM 之后，prefill 不用单纯为了装下 KV 而硬上 TP8。在并发 16–48 时，我们 采用 **TP4 prefill + TP8 decode（12 卡）**，替代 TP8 + TP8（16 卡）。并发 16/32/48 时，UMBP 分别供上了 30%、52%、75% 的 prompt token，需要重算的不到 3%。用少 25% 的卡，单卡吞吐反而提升 24–34% —— 这正是图 1 里 TCO 差距的重要来源之一。
+**缓存够大，拓扑就能改。** 有了这层去重的 DRAM 之后，prefill 不用单纯为了装下 KV 而硬上 TP8。在并发 16–48 时，我们 采用 **TP4 prefill + TP8 decode（12 卡）**，替代 TP8 + TP8（16 卡）。并发 16/32/48 时，UMBP 分别供上了 30%、52%、75% 的 prompt token，需要重算的不到 3%。用少 25% 的卡，单卡吞吐反而提升 24–34% —— 上表五个领先 NVIDIA 的点里，有四个就来自这几档 TP4 prefill。
 
 ![图 2](figures/fig3_umbp_tp4_prefill.png)
 
@@ -96,12 +108,7 @@ TTFT 的下降来自在一个 96% 前缀复用的负载上**不再重算前缀**
 
 这轮工作有两个结果。
 
-**一是横向对比 NVIDIA B200。** 在 AgentX 公开榜上，MI355X 的每美元 token 峰值产出是 B200 的 **1.5 倍**：
-
-| 每 1 美元 TCO 的 token 峰值产出 | |
-|---|---|
-| MI355X（UMBP + MoRI + SGLang） | **6900 万** |
-| B200（Dynamo SGLang） | 4600 万 |
+**一是横向对比 NVIDIA Blackwell 系统。** 在 AgentX 公开榜上，MI355X 已在部分工作点上超过 GB200 NVL72、B300 和 GB300 NVL72，每美元 token 产出最高领先 **5.6×**（见图 1 后的表格）。
 
 **二是纵向对比我们自己一个月前。** 同一套基准、同样并发 192：
 

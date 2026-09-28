@@ -1,14 +1,26 @@
-# UMBP Empowers AMD Instinct™ MI355X to Beat NVIDIA B200 Dynamo SGLang on the Public AgentX Leaderboard, at 1.5× the Token-per-Dollar TCO
+# MoRI UMBP Empowers AMD Instinct™ MI355X to Demonstrate Token-per-Dollar TCO Leadership on the Public AgentX Leaderboard
 
 *September 2026*
 
 Agentic applications run long multi-turn sessions, which makes the cost of serving them depend overwhelmingly on how much KV cache the server can reuse instead of recomputing.
 
-In July, together with Moonshot AI, we introduced **UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem as the backend behind the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — delivers **69M total tokens per $1 TCO at its peak, against 46M for B200 running Dynamo SGLang: a 1.5× advantage in tokens per dollar** (SemiAnalysis Rent / 3-Year-Commit cost tier, B200 at $3.7/chip/hr and MI355X at $2.9/chip/hr, as of 2026-09-25).
+In July, together with Moonshot AI, we introduced **UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem as the backend behind the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now **surpasses NVIDIA GB200 NVL72, B300 and GB300 NVL72 at selected operating points**, and peaks at **69M total tokens per $1 TCO** (SemiAnalysis Rent / 3-Year-Commit cost tier, MI355X at $2.9/chip/hr, as of 2026-09-25).
 
 ![Figure 1](figures/fig1_tco_vs_b200.png)
 
-*Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point. Against B200 FP4 (Dynamo SGLang), MI355X peaks at 69M tokens per $1 TCO vs. 46M.*
+*Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point.*
+
+At the operating points below, MI355X leads on tokens per dollar, and against B300 and GB200 NVL72 also on throughput per chip. Each MI355X point is paired with a measured NVIDIA point at the same or lower P90 interactivity, so in every row MI355X is at least as fast per user.
+
+| NVIDIA system (dashboard series, $/chip/hr) | P90 interactivity, tok/s/user (MI355X vs. NVIDIA) | Tokens per $1 TCO (MI355X vs. NVIDIA) | Throughput per chip, tok/s (MI355X vs. NVIDIA) |
+|---|---|---|---|
+| B300 (SGLang), $4.25 | 54.1 vs. 53.9 | 69.3M vs. 41.9M (**1.65×**) | 55.8k vs. 49.5k (**1.13×**) |
+| B300 (SGLang), $4.25 | 115.9 vs. 104.8 | 19.8M vs. 10.3M (**1.93×**) | 15.9k vs. 12.1k (**1.32×**) |
+| GB200 NVL72 (Dynamo vLLM), $4 | 102.5 vs. 84.7 | 26.6M vs. 4.7M (**5.6×**) | 21.4k vs. 5.3k (**4.1×**) |
+| GB200 NVL72 (Dynamo vLLM), $4 | 152.7 vs. 135.0 | 10.2M vs. 2.7M (**3.8×**) | 8.2k vs. 3.0k (**2.7×**) |
+| GB300 NVL72 (Dynamo SGLang), $5 | 152.7 vs. 146.0 | 10.2M vs. 8.9M (**1.15×**) | — |
+
+Rows are paired by P90 interactivity, not by concurrency; the two sides may run on different numbers of chips. By row, the concurrency is c256 vs. c128, c32 vs. c16, c48 vs. c8, c16 vs. c4 and c16 vs. c8 (MI355X vs. NVIDIA). The MI355X points come from the [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1); the NVIDIA points are the latest dashboard runs as of 2026-09-25: B300 from 2026-09-15, GB200 NVL72 from 2026-08-18 and GB300 NVL72 from 2026-09-10. Against GB300 NVL72 the lead is in tokens per dollar only.
 
 The rest of this post covers in detail how UMBP produces that result.
 
@@ -66,7 +78,7 @@ Replacing HiCache with the UMBP linker, measured end-to-end on the AgentX agenti
 
 The TTFT reduction comes from eliminating prefix recomputation on a workload with 96% prefix reuse. No kernel changed.
 
-**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — which is the mechanism behind a good part of the TCO gap in Figure 1.
+**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — and four of the five leads over NVIDIA in the table above come from these TP4-prefill points.
 
 ![Figure 2](figures/fig3_umbp_tp4_prefill.png)
 
@@ -90,12 +102,7 @@ Alongside this, the AMD SGLang team continues to deliver optimizations for DeepS
 
 This work produced two results.
 
-**First, against NVIDIA B200.** On the public AgentX leaderboard, MI355X delivers **1.5×** the peak tokens per dollar of B200:
-
-| Peak total tokens per $1 TCO | |
-|---|---|
-| MI355X (UMBP + MoRI + SGLang) | **69M** |
-| B200 (Dynamo SGLang) | 46M |
+**First, against NVIDIA Blackwell systems.** On the public AgentX leaderboard, MI355X surpasses GB200 NVL72, B300 and GB300 NVL72 at selected operating points, by up to **5.6×** in tokens per dollar (see the table after Figure 1).
 
 **Second, against ourselves a month earlier.** Same benchmark, same concurrency of 192:
 
