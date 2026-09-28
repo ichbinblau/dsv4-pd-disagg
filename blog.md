@@ -10,7 +10,7 @@ MoRI **UMBP** (Unified Memory & Bandwidth Pool) is built to keep that cache find
 
 *Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point. Against B200 FP4 (Dynamo SGLang), MI355X peaks at 69M tokens per $1 TCO vs. 46M.*
 
-Readers of [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html), which we published with Moonshot AI in July, will recognize the argument: *the decisive resource in agentic serving is the KV cache* — how much of the reuse roofline you capture, where the cache lives once it spills out of HBM, and whether the scheduler can route to it faster than recomputing it. That post introduced UMBP as the answer and measured a 3.2× smaller P99 TTFT at essentially unchanged cumulative hit rate.
+Readers of [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html), which we published with Moonshot AI in July, will recognize the argument: **the decisive resource in agentic serving is the KV cache** — how much of the reuse roofline you capture, where the cache lives once it spills out of HBM, and whether the scheduler can route to it faster than recomputing it. That post introduced UMBP as the answer and measured a **3.2×** smaller P99 TTFT at essentially unchanged cumulative hit rate.
 
 **This post measures that same stack against NVIDIA B200**, on a public third-party leaderboard.
 
@@ -29,7 +29,7 @@ AgentX replays whole agent sessions: each turn appends tool results to the accum
 
 It reports TTFT, P90 interactivity (per-user tok/s), TPGS (total tokens per GPU-second, counting cached tokens), and TCO (infrastructure cost per token) — the last of which is what Figure 1 plots.
 
-Two consequences. At 96% prefix reuse, *cache management determines prefill cost*. And because the agent blocks on the full response, the latency that matters is end-to-end, dominated by decode — so spending more of the machine on prefill does not buy headroom. The prefill work has to be eliminated instead.
+Two consequences. At 96% prefix reuse, *cache management determines prefill cost*. And because the agent blocks on the full response, the latency that matters is end-to-end, dominated by decode — so spending more of the machine on prefill does not buy headroom. **The prefill work has to be eliminated instead.**
 
 ## What the Workload Breaks, and What We Built to Match It
 
@@ -55,9 +55,9 @@ The benchmark is the InferenceX `agentic-coding` scenario with DRAM KV offload e
 
 ## MoRI UMBP + the SGLang KVCache Store Linker
 
-UMBP's design is laid out in the "What is UMBP" section of the July post: a single logical cache spanning engine HBM → host DRAM → the UMBP DRAM pool → SSD, built on three principles — **agentic-inference-native design, scheduler/framework/orchestrator co-design, and AMD hardware affinity**. All three serve one goal: an offloaded prefix stays *routable*, so the router can use placement and fetch-cost information to select the replica that will return it fastest.
+UMBP's design is laid out in the "What is UMBP" section of the July post: a single logical cache spanning engine HBM → host DRAM → the UMBP DRAM pool → SSD, built on three principles — **agentic-inference-native design, scheduler/framework/orchestrator co-design, and AMD hardware affinity**. All three serve one goal: **an offloaded prefix stays *routable***, so the router can use placement and fetch-cost information to select the replica that will return it fastest.
 
-This section covers what we found when we ran that design behind a production inference engine at high concurrency: the integration path itself had become the bottleneck.
+This section covers what we found when we ran that design behind a production inference engine at high concurrency: **the integration path itself** had become the bottleneck.
 
 ### What we found wrong with the HiCache path
 
@@ -94,7 +94,7 @@ Replacing HiCache with the UMBP linker, measured end-to-end on the AgentX agenti
 | 192 | **+14%** | **–66%** (35.3 s → 11.9 s) |
 | 256 | +9.7% | –51% |
 
-The TTFT reduction comes from eliminating prefix recomputation on a workload with 96% prefix reuse. No kernel changed.
+The TTFT reduction comes from **eliminating prefix recomputation** on a workload with 96% prefix reuse. No kernel changed.
 
 **A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 the September 23 recipe runs a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — which is the mechanism behind a good part of the TCO gap in Figure 1.
 
@@ -123,7 +123,7 @@ Three other AMD-developed changes shipped into the same MI355X recipe between Au
 - **Optimistic prefill with request-owned speculative KV** ([sglang#38978](https://github.com/sgl-project/sglang/pull/38978), [sglang#40111](https://github.com/sgl-project/sglang/pull/40111)). In PD disaggregation a request normally waits for decode to bootstrap it before prefill can start; at high concurrency that handshake is pure queueing time. Letting prefill start optimistically, with the speculative KV owned by the request rather than a pre-reserved decode slot, cut **P90 TTFT by 27.7% at concurrency 256**. Removing a host sync from DSpark prefill slot expansion cut P90 TTFT a further **13–16%** at concurrency 128–256.
 - **Per-stream split-K for MLA decode** ([sglang#39968](https://github.com/sgl-project/sglang/pull/39968)) picks `kv_splits` per index stream instead of applying one setting to layers whose KV lengths differ by orders of magnitude.
 
-![Figure 3](figures/fig1_pareto.png)
+![Figure 3](figures/fig1_pareto_0821_vs_0925.png)
 
 *Figure 3: Throughput per GPU vs. P90 interactivity across the optimization campaign. The Aug 21 baseline uses 16 GPUs (1P1D, TP8 + TP8) at every point; the optimized recipes pick 8, 12 or 16 GPUs per concurrency and report throughput normalized per GPU.*
 
@@ -131,7 +131,7 @@ Three other AMD-developed changes shipped into the same MI355X recipe between Au
 
 We aim for these results to be reproducible and fairly attributed:
 
-- **TCO comparison basis.** Figure 1 is the public InferenceX dashboard, Rent / 3-Year-Commit cost tier, at $3.7/chip/hr for B200 and $2.9/chip/hr for MI355X, updated 2026-09-25. The 1.5× figure compares peak tokens per $1 TCO: 69M for MI355X against 46M for B200. At matched interactivity in the mid-range the advantage is smaller, and at the high-interactivity end the B200 curve is ahead. Pick the comparison point that matches your own serving target.
+- **TCO comparison basis.** Figure 1 is the public InferenceX dashboard, Rent / 3-Year-Commit cost tier, at $3.7/chip/hr for B200 and $2.9/chip/hr for MI355X, updated 2026-09-25. The 1.5× figure compares **peak** tokens per $1 TCO: 69M for MI355X against 46M for B200. At matched interactivity in the mid-range the advantage is smaller, and at the high-interactivity end the B200 curve is ahead. Pick the comparison point that matches your own serving target.
 - **The comparison is against B200.** Figure 1 also plots B300, GB200, GB300 NVL72 and a Vera Rubin NVL72 preview, some of which sit above the MI355X curve. Those are newer or larger-system parts at higher TCO per chip ($4.25–$8.5/chip/hr vs. $2.9 for MI355X); this post claims a result against B200 (Dynamo SGLang) specifically and makes no claim against the rest of the field.
 - **Speculative decoding acceptance is simulated.** InferenceX fixes the acceptance length (AL) per checkpoint (`SGLANG_SIMULATE_ACC_LEN`) so every run is compared at the same acceptance. The move to the DeepSeek-V4-Pro-0813 checkpoint raised the reference AL from 2.49 to 3.01 (MTP-3 / DSpark γ=3), which accounts for about **9% of the throughput gain at concurrency 192** and is not a software optimization. The Sep 23 recipe runs DSpark γ=6 (AL 3.77) at concurrency 4 and 16.
 - **GPU counts differ between recipes.** The Aug 21 baseline uses 16 GPUs at every concurrency; the optimized recipes use 8 GPUs at concurrency 4, 12 at concurrency 16–48, and 16 at concurrency 128 and above. All throughput is reported per GPU.
@@ -148,7 +148,7 @@ We aim for these results to be reproducible and fairly attributed:
 | Peak throughput/GPU | 22.9k (c192) | 55.8k (c256) | **2.4×** |
 | Peak tokens per $1 TCO | — | 69M (MI355X) vs. 46M (B200) | **1.5×** |
 
-Kernels and parallelism layout still matter. But when 96% of prompt tokens have already been computed, the system that decides where those tokens live sets the cost per token. In July we argued that from first principles and closed with a roadmap: complete the UMBP integration, and carry these primitives to more engines. The KVCache Store Linker delivers the first item: UMBP is now wired directly into the engine's radix tree as a first-class KV substrate. The AgentX results above are that design measured against a competitor on public infrastructure.
+Kernels and parallelism layout still matter. But when 96% of prompt tokens have already been computed, **the system that decides where those tokens live sets the cost per token.** In July we argued that from first principles and closed with a roadmap: complete the UMBP integration, and carry these primitives to more engines. The KVCache Store Linker delivers the first item: UMBP is now wired directly into the engine's radix tree as a first-class KV substrate. The AgentX results above are that design measured against a competitor on public infrastructure.
 
 Next on that roadmap: bringing UMBP to the vLLM ecosystem.
 

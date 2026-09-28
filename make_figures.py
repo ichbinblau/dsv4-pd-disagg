@@ -19,6 +19,10 @@ AMD_RED = "#ED1C24"
 DARK = "#2B2B2B"
 GREY = "#8C8C8C"
 LIGHT = "#D9D9D9"
+# softer red / amber / green: baseline or worse -> better
+SOFT_RED = "#E15A4E"
+SOFT_AMBER = "#EFA73C"
+SOFT_GREEN = "#3A9E48"
 
 plt.rcParams.update({
     "font.size": 11,
@@ -121,13 +125,13 @@ def fig3_umbp():
 
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12, 4.8))
     x = range(len(concs))
-    ax.bar(x, gpu_hit, color=DARK, label="GPU HBM prefix hit")
-    ax.bar(x, dram_hit, bottom=gpu_hit, color=AMD_RED, label="UMBP DRAM hit")
-    ax.bar(x, miss, bottom=[a + b for a, b in zip(gpu_hit, dram_hit)], color=LIGHT,
+    ax.bar(x, gpu_hit, color=SOFT_GREEN, label="GPU HBM prefix hit")
+    ax.bar(x, dram_hit, bottom=gpu_hit, color=SOFT_AMBER, label="UMBP DRAM hit")
+    ax.bar(x, miss, bottom=[a + b for a, b in zip(gpu_hit, dram_hit)], color=SOFT_RED,
            label="Recomputed")
     for i, d in enumerate(dram_hit):
         ax.text(i, gpu_hit[i] + d / 2, f"{d:.0f}%", ha="center", va="center",
-                color="white", fontsize=10, fontweight="bold")
+                color=DARK, fontsize=10, fontweight="bold")
     ax.set_xticks(list(x))
     ax.set_xticklabels(concs)
     ax.set_ylabel("Share of prompt tokens (%)")
@@ -136,8 +140,8 @@ def fig3_umbp():
     ax.legend(loc="upper center", ncol=3, frameon=False, fontsize=9)
 
     w = 0.38
-    ax2.bar([i - w / 2 for i in x], tp8, w, color=GREY, label="Sep 15: TP8 prefill, 16 GPUs")
-    ax2.bar([i + w / 2 for i in x], tp4, w, color=AMD_RED, label="Sep 23: TP4 prefill + UMBP, 12 GPUs")
+    ax2.bar([i - w / 2 for i in x], tp8, w, color=SOFT_RED, label="Sep 15: TP8 prefill, 16 GPUs")
+    ax2.bar([i + w / 2 for i in x], tp4, w, color=SOFT_GREEN, label="Sep 23: TP4 prefill + UMBP, 12 GPUs")
     for i in x:
         ax2.text(i + w / 2, tp4[i] + 400, f"+{(tp4[i] / tp8[i] - 1) * 100:.0f}%",
                  ha="center", fontsize=9)

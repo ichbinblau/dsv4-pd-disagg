@@ -123,7 +123,7 @@ linker 以及周边的 KV cache 基础设施，都在与 SGLang 社区一起公�
 - **乐观 prefill + 请求自持的投机 KV**（[sglang#38978](https://github.com/sgl-project/sglang/pull/38978)、[sglang#40111](https://github.com/sgl-project/sglang/pull/40111)）。在 PD 分离里，请求通常要等 decode 侧 bootstrap 完才能开始 prefill；高并发下这次握手纯粹就是排队时间。让 prefill 乐观地先开跑、投机 KV 归请求自己所有而不是挂在预留的 decode 槽位上，**并发 256 时 P90 TTFT 降低 27.7%**。再去掉 DSpark prefill 槽位扩展里的一次 host 同步，并发 128–256 的 P90 TTFT 又降了 **13–16%**。
 - **MLA decode 的 per-stream split-K**（[sglang#39968](https://github.com/sgl-project/sglang/pull/39968)）：按 index stream 单独选 `kv_splits`，而不是用一套配置去套 KV 长度相差好几个数量级的所有层。
 
-![图 3](figures/fig1_pareto.png)
+![图 3](figures/fig1_pareto_0821_vs_0925.png)
 
 *图 3：整轮优化中的单卡吞吐 vs. P90 交互速度。8 月 21 日基线在所有点上都用 16 卡（1P1D，TP8 + TP8）；优化后的 recipe 在不同并发下分别用 8、12 或 16 卡，吞吐按单卡归一化。*
 
