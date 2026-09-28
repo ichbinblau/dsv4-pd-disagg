@@ -33,25 +33,15 @@ AgentX 回放的是完整的智能体会话：每一轮把工具调用的结果�
 
 ## 这套负载打破了什么，我们就用什么去接
 
-7 月那篇文章已经列过一张表，把 agentic 流量打破的「聊天时代假设」逐条摊开。其中这三条，是本文这套栈必须正面回答的：
+7 月那篇文章列过一张表，把 agentic 流量打破的「聊天时代假设」逐条摊开。其中这三条，是本文这套栈必须正面回答的：
 
-| 特点 | 它打破了哪个假设 |
-|---|---|
-| 同时有很多条长会话，还有子智能体 | “KV 缓存能装进 HBM。”并发稍微一高，大部分可复用的 KV 早就被从显存里赶出去了。 |
-| DeepSeek-V4 稀疏注意力（DSA indexer + MLA latent KV） | “KV 缓存是按 TP rank 切开的。”MLA latent 和 indexer KV 是在每个 rank 上*复制*的。 |
-| 引擎重启和滚动升级 | “缓存热度是免费的。”住在引擎进程里的 host 缓存，进程一死就跟着没了。 |
+- **KV 缓存装不进 HBM。** 同时跑着很多条长会话，再加上子智能体扇出，并发稍微一高，大部分可复用的 KV 早就被从显存里赶出去了。
+- **KV 缓存并不是按 TP rank 切开的。** DeepSeek-V4 的稀疏注意力里，MLA latent 和 DSA indexer KV 在每个 rank 上都有一份完整副本。
+- **缓存热度不是免费的。** host 缓存住在引擎进程里，引擎一重启就全部丢失，滚动升级同理。
 
-每一条都对应栈里的一层。所有结果都基于 MI355X 上的 SGLang PD 分离：prefill 和 decode 跑在不同节点，KV 通过 RDMA 在两边之间搬运。
+每一条都对应栈里的一层。所有结果都基于 MI355X 上的 SGLang PD 分离：prefill 和 decode 跑在不同节点，KV 由 MoRI-IO 通过 RDMA 在两边之间搬运；**MoRI UMBP** 提供分布式去重的 DRAM KV 池，算子来自 AITER。
 
-| 层次 | 组件 | 在这次工作里的角色 |
-|---|---|---|
-| 服务框架 | SGLang（ROCm 版 v0.5.17 → v0.5.20） | PD 分离、DP attention、MTP/DSpark 投机解码 |
-| KV 存储 | **MoRI UMBP** | 分布式、去重的 DRAM KV 池，通过 KVCache Store Linker 挂到 SGLang 的 radix tree 上 |
-| KV 传输 | MoRI-IO | prefill→decode 的 KV RDMA 传输 |
-| 算子 | AITER | FP4 MoE GEMM、FP4 稀疏注意力 indexer、MLA decode |
-| 平台 | ROCm 7.2，AMD Instinct MI355X | 每节点 8 卡，FP4 权重 |
-
-基准是 InferenceX 的 `agentic-coding` 场景，并开启 DRAM KV offload（`dram-utilization: 0.80`）。它作为 InferenceX CI 的一部分持续运行。
+所有测试都跑在 InferenceX 的 `agentic-coding` 场景下，开启 DRAM KV offload，并作为 InferenceX CI 的一部分持续运行。
 
 ## MoRI UMBP + SGLang KVCache Store Linker
 
@@ -61,7 +51,7 @@ UMBP 的设计在 7 月那篇文章的 "What is UMBP" 一节里有完整交代�
 
 ### HiCache 这条路的问题出在哪
 
-在 7 月那篇文章里，UMBP 是按框架当时提供的方式接入 SGLang 的：作为 **HiCache 的 L3 存储后端**，注册名为 `mori`，用 `--hicache-storage-backend mori` 启用。这条路是能跑通的，上面引用的那些数字也正是这么跑出来的。但在 AgentX 上把并发继续推高后，它就达不到硬件所允许的水平了，瓶颈出在 UMBP 与引擎之间的 HiCache 这一层。我们找到了六个问题，而且都是结构性的：
+在 7 月那篇文章里，UMBP 是按框架当时提供的方式接入 SGLang 的：作为 **HiCache 的 L3 存储后端**。这条路是能跑通的，上面引用的那些数字也正是这么跑出来的。但在 AgentX 上把并发继续推高后，它就达不到硬件所允许的水平了，瓶颈出在 UMBP 与引擎之间的 HiCache 这一层。我们找到了六个问题，而且都是结构性的：
 
 - **浪费了可共享的 DRAM。** 不可共享的 HiCache 占着 DRAM，而这些 DRAM 本可以给可共享的 L3 后端用，等于压缩了有效共享容量。
 - **数据通路绕远。** HiCache 夹在 L1 HBM 和 L3 后端中间，既增加了 load/offload 开销，又堵死了 L1 ⇔ L3 的直连通路。
@@ -119,9 +109,9 @@ linker 以及周边的 KV cache 基础设施，都在与 SGLang 社区一起公�
 8 月 21 日到 9 月 23 日之间，另外三项 AMD 自研改动也进了同一个 MI355X recipe；它们和 UMBP 合起来把单卡吞吐翻了一倍（见「总结」）。
 
 - **FP4 稀疏注意力 indexer**（[sglang#37353](https://github.com/sgl-project/sglang/pull/37353)）。DeepSeek-V4 的 DSA indexer 要对每个 query token、在每一层给整段上下文打分，而且自带一份 per-token KV。把它跑在 gfx950 的 AITER FP4 kernel 上，这份 KV 从**每 token 132 B 降到 68 B** —— HBM 能装下更多并发序列，每步 decode 的 indexer 带宽更少，走 MoRI 链路的字节也更少。
-- **为 PD 分离重新设计 DP attention**（[InferenceX#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823)）。attention 在 8 个 rank 上做数据并行，而专家权重改成**按 TP 切分（EP1）**、不再用 EP8 分布，从而把 all-to-all 的 dispatch/combine 和专家路由的负载不均从关键路径上拿掉。调优开关按角色（prefill / decode）分别生效，`max-running-requests` 也改成随基准并发伸缩、不再用固定上限。这一项与 FP4 indexer、v0.5.18 镜像打包在一起，在并发 192 时是**单卡吞吐 +51%**；随并发伸缩的调度再加 **+7%**，P90 TTFT 从 33.6 秒降到 16.2 秒。
+- **为 PD 分离重新设计 DP attention**（[InferenceX#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823)）。attention 在 8 个 rank 上做数据并行，而专家权重改成**按 TP 切分（EP1）**、不再用 EP8 分布，从而把 all-to-all 的 dispatch/combine 和专家路由的负载不均从关键路径上拿掉。调优按角色（prefill / decode）分别生效，调度器的在跑请求上限也改成随基准并发伸缩、不再固定。这一项与 FP4 indexer、v0.5.18 镜像打包在一起，在并发 192 时是**单卡吞吐 +51%**；随并发伸缩的调度再加 **+7%**，P90 TTFT 从 33.6 秒降到 16.2 秒。
 - **乐观 prefill + 请求自持的投机 KV**（[sglang#38978](https://github.com/sgl-project/sglang/pull/38978)、[sglang#40111](https://github.com/sgl-project/sglang/pull/40111)）。在 PD 分离里，请求通常要等 decode 侧 bootstrap 完才能开始 prefill；高并发下这次握手纯粹就是排队时间。让 prefill 乐观地先开跑、投机 KV 归请求自己所有而不是挂在预留的 decode 槽位上，**并发 256 时 P90 TTFT 降低 27.7%**。再去掉 DSpark prefill 槽位扩展里的一次 host 同步，并发 128–256 的 P90 TTFT 又降了 **13–16%**。
-- **MLA decode 的 per-stream split-K**（[sglang#39968](https://github.com/sgl-project/sglang/pull/39968)）：按 index stream 单独选 `kv_splits`，而不是用一套配置去套 KV 长度相差好几个数量级的所有层。
+- **MLA decode 的 per-stream split-K**（[sglang#39968](https://github.com/sgl-project/sglang/pull/39968)）：按 index stream 单独选 split-K 因子，而不是用一套配置去套 KV 长度相差好几个数量级的所有层。
 
 ![图 3](figures/fig1_pareto_0821_vs_0925.png)
 
@@ -133,7 +123,7 @@ linker 以及周边的 KV cache 基础设施，都在与 SGLang 社区一起公�
 
 - **TCO 对比的口径。** 图 1 来自公开的 InferenceX dashboard，Rent / 三年承诺 成本档位，B200 为 $3.7/chip/hr、MI355X 为 $2.9/chip/hr，数据更新于 2026-09-25。1.5× 这个数字比的是**峰值**每 1 美元 TCO 的 token 产出：MI355X 6900 万，B200 4600 万。在中段、交互速度对齐的情况下优势要小一些；在高交互速度端，B200 的曲线反而在前面。请按你自己实际的服务目标去选对比点。
 - **本文对比的对象是 B200。** 图 1 上还画了 B300、GB200、GB300 NVL72 以及一条 Vera Rubin NVL72 的预览曲线，其中部分曲线位于 MI355X 之上。它们属于更新或更大整机规格的产品，单芯片 TCO 也更高（$4.25–$8.5/chip/hr，MI355X 为 $2.9）；本文给出的结论只针对 B200（Dynamo SGLang），不对其余型号作任何声明。
-- **投机解码的接受率是模拟的。** InferenceX 对每个 checkpoint 把接受长度（AL）固定在一个参考值（`SGLANG_SIMULATE_ACC_LEN`），这样所有 run 都在同一接受率下比较。换到 DeepSeek-V4-Pro-0813 checkpoint 后，参考 AL 从 2.49 提到 3.01（MTP-3 / DSpark γ=3），这部分大约贡献了**并发 192 下 9% 的吞吐提升**，它不属于软件优化。9 月 23 日的 recipe 在并发 4 和 16 时跑 DSpark γ=6（AL 3.77）。
+- **投机解码的接受率是模拟的。** InferenceX 对每个 checkpoint 把接受长度（AL）固定在一个参考值，这样所有 run 都在同一接受率下比较。换到 DeepSeek-V4-Pro-0813 checkpoint 后，参考 AL 从 2.49 提到 3.01（MTP-3 / DSpark γ=3），这部分大约贡献了**并发 192 下 9% 的吞吐提升**，它不属于软件优化。9 月 23 日的 recipe 在并发 4 和 16 时跑 DSpark γ=6（AL 3.77）。
 - **不同 recipe 用的卡数不同。** 8 月 21 日基线在所有并发下都用 16 卡；优化后的 recipe 在并发 4 用 8 卡、并发 16–48 用 12 卡、并发 128 及以上用 16 卡。所有吞吐都按单卡报告。
 - **有些特性是打包测的。** 当一次 recipe 更新把几个特性和镜像升级混在一起时，我们直接报合并收益，而不去猜各自占多少；单项特性的数字来自各自上游 PR 里的 A/B 测量。
 - **run 间波动。** 同一配置重复跑，大多数点的吞吐波动在 ±2% 以内（并发 48 最高到 11%）。

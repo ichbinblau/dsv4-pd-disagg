@@ -33,25 +33,15 @@ Two consequences. At 96% prefix reuse, *cache management determines prefill cost
 
 ## What the Workload Breaks, and What We Built to Match It
 
-The July post tabulated the chat-era assumptions that agentic traffic invalidates. Three of those rows are the ones this stack had to answer:
+The July post tabulated the chat-era assumptions that agentic traffic invalidates. Three of them are the ones this stack had to answer:
 
-| Characteristic | Assumption it breaks |
-|---|---|
-| Working set of many long sessions, plus subagents | "The KV cache fits in HBM." At moderate concurrency, most reusable KV has already been evicted from GPU memory. |
-| DeepSeek-V4 sparse attention (a DSA indexer plus MLA latent KV) | "The KV cache is sharded across TP ranks." The MLA latent and indexer KV are *replicated* on every rank. |
-| Engine restarts and rolling upgrades | "Cache warmth is free." A host cache that lives inside the engine process dies with it. |
+- **The KV cache does not fit in HBM.** With many long sessions live at once and subagents fanning out, most reusable KV has already been evicted from GPU memory at moderate concurrency.
+- **The KV cache is not sharded across TP ranks.** Under DeepSeek-V4 sparse attention, the MLA latent and DSA indexer KV are replicated in full on every rank.
+- **Cache warmth is not free.** A host cache that lives inside the engine process is lost on every restart, and on every rolling upgrade.
 
-Each row dictates a layer of the stack. All results use SGLang PD disaggregation on MI355X: prefill and decode run on separate nodes, and KV moves between them over RDMA.
+Each of these dictates a layer of the stack. All results use SGLang PD disaggregation on MI355X: prefill and decode run on separate nodes, with MoRI-IO moving KV between them over RDMA; **MoRI UMBP** provides the distributed, deduplicated DRAM KV pool, and kernels come from AITER.
 
-| Layer | Component | Role in this work |
-|---|---|---|
-| Serving | SGLang (ROCm builds v0.5.17 → v0.5.20) | PD disaggregation, DP attention, MTP/DSpark speculative decoding |
-| KV storage | **MoRI UMBP** | Distributed, deduplicated DRAM KV pool, attached to SGLang's radix tree through the KVCache Store Linker |
-| KV transport | MoRI-IO | Prefill→decode KV transfer over RDMA |
-| Kernels | AITER | FP4 MoE GEMMs, FP4 sparse-attention indexer, MLA decode |
-| Platform | ROCm 7.2, AMD Instinct MI355X | 8 GPUs per node, FP4 weights |
-
-The benchmark is the InferenceX `agentic-coding` scenario with DRAM KV offload enabled (`dram-utilization: 0.80`). It runs as part of InferenceX CI.
+All runs use the InferenceX `agentic-coding` scenario with DRAM KV offload enabled, as part of InferenceX CI.
 
 ## MoRI UMBP + the SGLang KVCache Store Linker
 
@@ -61,7 +51,7 @@ This section covers what we found when we ran that design behind a production in
 
 ### What we found wrong with the HiCache path
 
-In the July post, UMBP was integrated into SGLang the way the framework offered: as a **HiCache L3 storage backend**, registered as `mori` and selected with `--hicache-storage-backend mori`. That integration works, and it produced the numbers quoted above. At higher concurrency on AgentX it fell short of what the hardware allows, and the limit was in the HiCache tier between UMBP and the engine. Six problems, all structural:
+In the July post, UMBP was integrated into SGLang the way the framework offered: as a **HiCache L3 storage backend**. That integration works, and it produced the numbers quoted above. At higher concurrency on AgentX it fell short of what the hardware allows, and the limit was in the HiCache tier between UMBP and the engine. Six problems, all structural:
 
 - **Wasted shareable DRAM.** Unsharable HiCache occupies DRAM that could otherwise serve the shareable L3 backend, shrinking effective shareable capacity.
 - **Indirect data path.** Sitting between L1 HBM and the L3 backend, HiCache adds load/offload overhead and blocks a direct L1 ⇔ L3 data path.
@@ -119,9 +109,9 @@ The linker and the surrounding KV cache infrastructure are being built in the op
 Three other AMD-developed changes shipped into the same MI355X recipe between Aug 21 and Sep 23; together with UMBP they doubled throughput per GPU (see Summary).
 
 - **FP4 sparse-attention indexer** ([sglang#37353](https://github.com/sgl-project/sglang/pull/37353)). DeepSeek-V4's DSA indexer scores the whole context for every query token at every layer, and carries its own per-token KV. Running it on AITER FP4 kernels on gfx950 cuts that KV from **132 B to 68 B per token** — more concurrent sequences in HBM, less indexer bandwidth per decode step, and fewer bytes over the MoRI link.
-- **DP attention redesigned for PD disaggregation** ([InferenceX#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823)). Attention runs data-parallel across 8 ranks while expert weights are **TP-sharded (EP1)** rather than distributed by EP8, which takes all-to-all dispatch/combine and expert-routing imbalance off the critical path. Tuning knobs are gated by role (prefill vs. decode), and `max-running-requests` scales with benchmark concurrency instead of a fixed cap. Bundled with the FP4 indexer and the v0.5.18 image, this was **+51% throughput per GPU at concurrency 192**; concurrency-scaled scheduling added another **+7%**, and P90 TTFT fell from 33.6 s to 16.2 s.
+- **DP attention redesigned for PD disaggregation** ([InferenceX#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823)). Attention runs data-parallel across 8 ranks while expert weights are **TP-sharded (EP1)** rather than distributed by EP8, which takes all-to-all dispatch/combine and expert-routing imbalance off the critical path. Tuning is gated by role (prefill vs. decode), and the scheduler's running-request cap scales with benchmark concurrency instead of being fixed. Bundled with the FP4 indexer and the v0.5.18 image, this was **+51% throughput per GPU at concurrency 192**; concurrency-scaled scheduling added another **+7%**, and P90 TTFT fell from 33.6 s to 16.2 s.
 - **Optimistic prefill with request-owned speculative KV** ([sglang#38978](https://github.com/sgl-project/sglang/pull/38978), [sglang#40111](https://github.com/sgl-project/sglang/pull/40111)). In PD disaggregation a request normally waits for decode to bootstrap it before prefill can start; at high concurrency that handshake is pure queueing time. Letting prefill start optimistically, with the speculative KV owned by the request rather than a pre-reserved decode slot, cut **P90 TTFT by 27.7% at concurrency 256**. Removing a host sync from DSpark prefill slot expansion cut P90 TTFT a further **13–16%** at concurrency 128–256.
-- **Per-stream split-K for MLA decode** ([sglang#39968](https://github.com/sgl-project/sglang/pull/39968)) picks `kv_splits` per index stream instead of applying one setting to layers whose KV lengths differ by orders of magnitude.
+- **Per-stream split-K for MLA decode** ([sglang#39968](https://github.com/sgl-project/sglang/pull/39968)) picks the split-K factor per index stream instead of applying one setting to layers whose KV lengths differ by orders of magnitude.
 
 ![Figure 3](figures/fig1_pareto_0821_vs_0925.png)
 
@@ -133,7 +123,7 @@ We aim for these results to be reproducible and fairly attributed:
 
 - **TCO comparison basis.** Figure 1 is the public InferenceX dashboard, Rent / 3-Year-Commit cost tier, at $3.7/chip/hr for B200 and $2.9/chip/hr for MI355X, updated 2026-09-25. The 1.5× figure compares **peak** tokens per $1 TCO: 69M for MI355X against 46M for B200. At matched interactivity in the mid-range the advantage is smaller, and at the high-interactivity end the B200 curve is ahead. Pick the comparison point that matches your own serving target.
 - **The comparison is against B200.** Figure 1 also plots B300, GB200, GB300 NVL72 and a Vera Rubin NVL72 preview, some of which sit above the MI355X curve. Those are newer or larger-system parts at higher TCO per chip ($4.25–$8.5/chip/hr vs. $2.9 for MI355X); this post claims a result against B200 (Dynamo SGLang) specifically and makes no claim against the rest of the field.
-- **Speculative decoding acceptance is simulated.** InferenceX fixes the acceptance length (AL) per checkpoint (`SGLANG_SIMULATE_ACC_LEN`) so every run is compared at the same acceptance. The move to the DeepSeek-V4-Pro-0813 checkpoint raised the reference AL from 2.49 to 3.01 (MTP-3 / DSpark γ=3), which accounts for about **9% of the throughput gain at concurrency 192** and is not a software optimization. The Sep 23 recipe runs DSpark γ=6 (AL 3.77) at concurrency 4 and 16.
+- **Speculative decoding acceptance is simulated.** InferenceX fixes the acceptance length (AL) at a reference value per checkpoint, so every run is compared at the same acceptance. The move to the DeepSeek-V4-Pro-0813 checkpoint raised the reference AL from 2.49 to 3.01 (MTP-3 / DSpark γ=3), which accounts for about **9% of the throughput gain at concurrency 192** and is not a software optimization. The Sep 23 recipe runs DSpark γ=6 (AL 3.77) at concurrency 4 and 16.
 - **GPU counts differ between recipes.** The Aug 21 baseline uses 16 GPUs at every concurrency; the optimized recipes use 8 GPUs at concurrency 4, 12 at concurrency 16–48, and 16 at concurrency 128 and above. All throughput is reported per GPU.
 - **Some features are measured in bundles.** Where a recipe update combined several features with an image upgrade, we report the combined gain rather than guessing a split; per-feature numbers come from the A/B measurements in the upstream PRs.
 - **Run-to-run variance.** Rerunning the same configuration moved throughput by ±2% at most points (up to 11% at concurrency 48).
