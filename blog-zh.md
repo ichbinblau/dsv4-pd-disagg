@@ -4,7 +4,7 @@
 
 agentic（智能体）应用其多轮会话的特点使得服务成本极大取决于服务端能重用KV cache来避免重算。
 
-我们今年 7 月与 Moonshot AI 联合发表的 [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html) 隆重推出了 **UMBP**（Unified Memory & Bandwidth Pool，统一内存与带宽池）。UMBP 是 AMD MoRI 团队从 agentic 场景出发、遵循第一性原理、专为 AMD 平台打造的 KV cache 基础设施，近一个月我们把这套成果贡献到 SGLang 社区，作为全新 KVCache Store Linker 的后端接入开源生态，让更广泛的生态用户都能受益。在 SemiAnalysis 的公开 AgentX 基准、DeepSeek-V4-Pro-0813 1.6T 模型上，AMD MI355X上通过MoRI disagg，配备 UMBP 做统一kvcache池， 叠加AMD一直以来在SGLang社区不断的优化， 已**在部分工作点上超过 NVIDIA GB200 NVL72、B300 和 GB300 NVL72**，峰值达到**每 1 美元 TCO 产出 6900 万 token**（SemiAnalysis Rent / 三年承诺 成本档位，MI355X 为 $2.9/chip/hr，数据截至 2026-09-25）。
+我们今年 7 月与 Moonshot AI 联合发表的 [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html) 隆重推出了 **UMBP**（Unified Memory & Bandwidth Pool，统一内存与带宽池）。UMBP 是 AMD MoRI 团队从 agentic 场景出发、遵循第一性原理、专为 AMD 平台打造的 KV cache 基础设施，近一个月我们把这套成果贡献到 SGLang 社区，作为全新 KVCache Store Linker 的后端接入开源生态，让更广泛的生态用户都能受益。在 SemiAnalysis 的公开 AgentX 基准、DeepSeek-V4-Pro-0813 1.6T 模型上，AMD MI355X上通过MoRI disagg，配备 UMBP 做统一kvcache池， 叠加AMD一直以来在SGLang社区不断的优化， 已**在部分工作点上超过 NVIDIA GB200 NVL72、B300 和 GB300 NVL72**，峰值达到**每 1 美元 TCO 产出 6900 万 token，而 B200 跑 Dynamo SGLang 是 4600 万 —— 每美元 token 产出领先 1.5×**（SemiAnalysis Rent / 三年承诺 成本档位，B200 为 $3.7/chip/hr，MI355X 为 $2.9/chip/hr，数据截至 2026-09-25）。
 
 ![图 1](figures/fig1_tco_vs_b200.png)
 
