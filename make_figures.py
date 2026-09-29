@@ -155,8 +155,34 @@ def fig3_umbp():
     plt.close(fig)
 
 
+def fig5_c192_summary():
+    # concurrency 192: Aug 21 baseline vs. Sep 25 (run 35879254139)
+    panels = [
+        ("Throughput per GPU", "tok/s", 22932, 46563, lambda v: f"{v / 1000:.1f}k", "2.03×"),
+        ("P90 TTFT (lower is better)", "s", 33.6, 11.8, lambda v: f"{v:.1f} s", "–65%"),
+        ("P90 interactivity", "tok/s/user", 23.5, 59.3, lambda v: f"{v:.1f}", "2.5×"),
+    ]
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4.2))
+    for ax, (title, unit, before, after, fmt, change) in zip(axes, panels):
+        ax.bar([0, 1], [before, after], 0.6, color=[SOFT_RED, SOFT_GREEN])
+        top = max(before, after)
+        for x, v in zip([0, 1], [before, after]):
+            ax.text(x, v + top * 0.02, fmt(v), ha="center", fontsize=10)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["Aug 21", "Sep 25"])
+        ax.set_ylabel(unit)
+        ax.set_ylim(0, top * 1.18)
+        ax.set_title(f"{title}: {change}")
+        ax.grid(axis="x", visible=False)
+    fig.suptitle("DeepSeek-V4-Pro FP4 agentic on MI355X at concurrency 192", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "fig5_c192_aug_vs_sep.png"), dpi=200)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     fig1_pareto()
     fig2_waterfall()
     fig3_umbp()
+    fig5_c192_summary()
     print("wrote", sorted(os.listdir(OUT)))

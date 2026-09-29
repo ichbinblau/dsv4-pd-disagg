@@ -4,23 +4,15 @@
 
 Agentic applications run long multi-turn sessions, which makes the cost of serving them depend overwhelmingly on how much KV cache the server can reuse instead of recomputing.
 
-In July, together with Moonshot AI, we introduced **UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem as the backend behind the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now **surpasses NVIDIA GB200 NVL72, B300 and GB300 NVL72 at selected operating points**, and delivers **69M total tokens per $1 TCO at its peak, against 46M for B200 running Dynamo SGLang: a 1.5× advantage in tokens per dollar** (SemiAnalysis Rent / 3-Year-Commit cost tier, B200 at $3.7/chip/hr and MI355X at $2.9/chip/hr, as of 2026-09-25).
+In July, together with Moonshot AI, we introduced **UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem as the backend behind the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now **outperforms NVIDIA B300 and GB200 NVL72 at the same per-user speed**: at 100 tok/s/user P90 interactivity it delivers **1.7× and 5.3× their throughput per chip, and 2.5× and 7.3× their tokens per dollar**. At its peak it delivers **69M total tokens per $1 TCO, against 46M for B200 running Dynamo SGLang: a 1.5× advantage in tokens per dollar** (SemiAnalysis Rent / 3-Year-Commit cost tier, B200 at $3.7/chip/hr and MI355X at $2.9/chip/hr, as of 2026-09-25).
 
 ![Figure 1](figures/fig1_tco_vs_b200.png)
 
 *Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point.*
 
-At the operating points below, MI355X leads on tokens per dollar, and against B300 and GB200 NVL72 also on throughput per chip. Each MI355X point is paired with a measured NVIDIA point at the same or lower P90 interactivity, so in every row MI355X is at least as fast per user.
+![Figure 2](figures/fig2_tco.png)
 
-| NVIDIA system (dashboard series, $/chip/hr) | P90 interactivity, tok/s/user (MI355X vs. NVIDIA) | Tokens per $1 TCO (MI355X vs. NVIDIA) | Throughput per chip, tok/s (MI355X vs. NVIDIA) |
-|---|---|---|---|
-| B300 (SGLang), $4.25 | 54.1 vs. 53.9 | 69.3M vs. 41.9M (**1.65×**) | 55.8k vs. 49.5k (**1.13×**) |
-| B300 (SGLang), $4.25 | 115.9 vs. 104.8 | 19.8M vs. 10.3M (**1.93×**) | 15.9k vs. 12.1k (**1.32×**) |
-| GB200 NVL72 (Dynamo vLLM), $4 | 102.5 vs. 84.7 | 26.6M vs. 4.7M (**5.6×**) | 21.4k vs. 5.3k (**4.1×**) |
-| GB200 NVL72 (Dynamo vLLM), $4 | 152.7 vs. 135.0 | 10.2M vs. 2.7M (**3.8×**) | 8.2k vs. 3.0k (**2.7×**) |
-| GB300 NVL72 (Dynamo SGLang), $5 | 152.7 vs. 146.0 | 10.2M vs. 8.9M (**1.15×**) | — |
-
-The MI355X points come from the [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1); the NVIDIA points are the latest dashboard runs as of 2026-09-25: B300 from 2026-09-15, GB200 NVL72 from 2026-08-18 and GB300 NVL72 from 2026-09-10. Against GB300 NVL72 the lead is in tokens per dollar only.
+*Figure 2: Cost per million total tokens (Rent / 3-Year-Commit tier) at 100 tok/s/user P90 interactivity, DeepSeek-V4-Pro-0813 1.6T agentic, from the public SemiAnalysis InferenceX dashboard (updated 2026-09-28). Shorter bars are cheaper; the figure under each price is the throughput per chip at that interactivity.*
 
 The rest of this post covers in detail how UMBP produces that result.
 
@@ -78,11 +70,11 @@ Replacing HiCache with the UMBP linker, measured end-to-end on the AgentX agenti
 
 The TTFT reduction comes from eliminating prefix recomputation on a workload with 96% prefix reuse. No kernel changed.
 
-**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — and four of the five leads over NVIDIA in the table above come from these TP4-prefill points.
+**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — and the leads over NVIDIA at 100 tok/s/user cited in the introduction rest on these TP4-prefill points.
 
-![Figure 2](figures/fig3_umbp_tp4_prefill.png)
+![Figure 3](figures/fig4_umbp_tp4_prefill.png)
 
-*Figure 2: Left: where the TP4 prefill finds the KV for each prompt token under the UMBP linker — GPU HBM prefix cache, UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark γ=6.*
+*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the UMBP linker — GPU HBM prefix cache, UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark block size=6.*
 
 The trade-off is prefill time. With half the prefill GPUs, P90 TTFT at concurrency 16–48 rises by 26–53% (2.2–3.6 s → 2.7–5.6 s). For agentic workloads, where the agent waits for the full response and TTFT is a small fraction of it, we take that trade for more throughput per GPU at a fixed per-user decode speed.
 
@@ -94,23 +86,21 @@ Alongside this, the AMD SGLang team continues to deliver optimizations for DeepS
 - **Optimistic prefill with request-owned speculative KV** . In PD disaggregation a request normally waits for decode to bootstrap it before prefill can start; at high concurrency that handshake is pure queueing time. Letting prefill start optimistically, with the speculative KV owned by the request rather than a pre-reserved decode slot, cut **P90 TTFT by 27.7% at concurrency 256**. Removing a host sync from DSpark prefill slot expansion cut P90 TTFT a further **13–16%** at concurrency 128–256.
 - **Per-stream split-K for MLA decode**  picks the split-K factor per index stream instead of applying one setting to layers whose KV lengths differ by orders of magnitude.
 
-![Figure 3](figures/fig1_pareto_0821_vs_0925.png)
+![Figure 4](figures/fig3_pareto_0821_vs_0925.png)
 
-*Figure 3: Throughput per GPU vs. P90 interactivity across the optimization campaign. The Aug 21 baseline uses 16 GPUs (1P1D, TP8 + TP8) at every point; the optimized recipes pick 8, 12 or 16 GPUs per concurrency and report throughput normalized per GPU.*
+*Figure 4: Throughput per GPU vs. P90 interactivity across the optimization campaign. The Aug 21 baseline uses 16 GPUs (1P1D, TP8 + TP8) at every point; the optimized recipes pick 8, 12 or 16 GPUs per concurrency and report throughput normalized per GPU.*
 
 ## Summary
 
 This work produced two results.
 
-**First, against NVIDIA Blackwell systems.** On the public AgentX leaderboard, MI355X surpasses GB200 NVL72, B300 and GB300 NVL72 at selected operating points, by up to **5.6×** in tokens per dollar (see the table after Figure 1).
+**First, against NVIDIA Blackwell systems.** On the public AgentX leaderboard, at the same per-user speed, MI355X beats B300 and GB200 NVL72 on both throughput per chip and tokens per dollar (Figure 2).
 
-**Second, against ourselves a month earlier.** Same benchmark, same concurrency of 192:
+**Second, against ourselves a month earlier.** On the same benchmark at the same concurrency of 192, throughput, TTFT and interactivity all improved substantially (Figure 5).
 
-| Metric | Aug 21 | Sep 25 | Change |
-|---|---|---|---|
-| Throughput/GPU | 22.9k tok/s | 46.6k tok/s | **2.03×** |
-| P90 TTFT | 33.6 s | 11.8 s | **–65%** |
-| P90 interactivity | 23.5 tok/s/user | 59.3 tok/s/user | **2.5×** |
+![Figure 5](figures/fig5_c192_aug_vs_sep.png)
+
+*Figure 5: MI355X at concurrency 192, [Aug 21 baseline](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4) vs. [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1). Left to right: throughput per GPU, P90 TTFT (lower is better) and P90 interactivity.*
 
 Peak throughput per GPU also rose from 22.9k to 55.8k (**2.4×**), at concurrency 256.
 
