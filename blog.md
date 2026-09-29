@@ -106,7 +106,7 @@ Peak throughput per GPU also rose from 22.9k to 55.8k (**2.4×**), at concurrenc
 
 In an agentic workload, 96% of prompt tokens have already been computed, so the cost per token is set by the system that manages where those tokens live. UMBP is that system: it turns DRAM into a deduplicated KV pool that is shareable across instances and survives engine restarts, wired straight into SGLang's radix tree through the KVCache Store Linker.
 
-The first item on the July roadmap was completing the UMBP integration; that is now delivered. The next is bringing UMBP to the broader ecosystem e.g. vLLM, llm-d.
+The first item on the July roadmap was completing the UMBP integration; that is now delivered. The next is bringing UMBP to the broader ecosystem e.g. ATOM, vLLM, llm-d.
 
 ## Acknowledgements
 
