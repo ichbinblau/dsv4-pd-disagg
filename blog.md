@@ -110,7 +110,7 @@ The first item on the July roadmap was completing the UMBP integration; that is 
 
 ## Acknowledgements
 
-We thank the SGLang community for design reviews and fast upstreaming, SemiAnalysis for the AgentX benchmark and InferenceX CI infrastructure, and the AMD AITER, MoRI and ROCm teams.
+We thank the SGLang community for design reviews and fast upstreaming, SemiAnalysis for the AgentX benchmark and InferenceX CI infrastructure, and the AMD MoRI, SGLang, and AITER teams.
 
 ## References
 
