@@ -121,12 +121,12 @@ def fig3_umbp():
     dram_hit = [29.7, 51.7, 75.4]
     miss = [2.8, 2.5, 2.8]
     tp8 = [6133, 12738, 17272]   # Sep 15: TP8 prefill + TP8 decode, 16 GPUs
-    tp4 = [8246, 15948, 21407]   # Sep 23: TP4 prefill + TP8 decode + UMBP, 12 GPUs
+    tp4 = [8246, 15948, 21407]   # Sep 25: TP4 prefill + TP8 decode + MoRI UMBP, 12 GPUs
 
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12, 4.8))
     x = range(len(concs))
     ax.bar(x, gpu_hit, color=SOFT_GREEN, label="GPU HBM prefix hit")
-    ax.bar(x, dram_hit, bottom=gpu_hit, color=SOFT_AMBER, label="UMBP DRAM hit")
+    ax.bar(x, dram_hit, bottom=gpu_hit, color=SOFT_AMBER, label="MoRI UMBP DRAM hit")
     ax.bar(x, miss, bottom=[a + b for a, b in zip(gpu_hit, dram_hit)], color=SOFT_RED,
            label="Recomputed")
     for i, d in enumerate(dram_hit):
@@ -141,7 +141,7 @@ def fig3_umbp():
 
     w = 0.38
     ax2.bar([i - w / 2 for i in x], tp8, w, color=SOFT_RED, label="Sep 15: TP8 prefill, 16 GPUs")
-    ax2.bar([i + w / 2 for i in x], tp4, w, color=SOFT_GREEN, label="Sep 23: TP4 prefill + UMBP, 12 GPUs")
+    ax2.bar([i + w / 2 for i in x], tp4, w, color=SOFT_GREEN, label="Sep 25: TP4 prefill + MoRI UMBP, 12 GPUs")
     for i in x:
         ax2.text(i + w / 2, tp4[i] + 400, f"+{(tp4[i] / tp8[i] - 1) * 100:.0f}%",
                  ha="center", fontsize=9)
@@ -151,7 +151,7 @@ def fig3_umbp():
     ax2.set_title("Same load on 25% fewer GPUs")
     ax2.legend(loc="upper left", frameon=False, fontsize=9)
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "fig3_umbp_tp4_prefill.png"), dpi=200)
+    fig.savefig(os.path.join(OUT, "fig4_umbp_tp4_prefill.png"), dpi=200)
     plt.close(fig)
 
 

@@ -4,17 +4,17 @@
 
 Agentic applications run long multi-turn sessions, which makes the cost of serving them depend overwhelmingly on how much KV cache the server can reuse instead of recomputing.
 
-In July, together with Moonshot AI, we introduced **UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem as the backend behind the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now **outperforms NVIDIA B300 and GB200 NVL72 at the same per-user speed**: at 100 tok/s/user P90 interactivity it delivers **1.7× and 5.3× their throughput per chip, and 2.5× and 7.3× their tokens per dollar**. At its peak it delivers **69M total tokens per $1 TCO, against 46M for B200 running Dynamo SGLang: a 1.5× advantage in tokens per dollar** (SemiAnalysis Rent / 3-Year-Commit cost tier, B200 at $3.7/chip/hr and MI355X at $2.9/chip/hr, as of 2026-09-25).
+In July, together with Moonshot AI, we introduced **MoRI UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). MoRI UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem as the backend behind the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with MoRI UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now **outperforms NVIDIA B300 and GB200 NVL72 at the same per-user speed**: at 100 tok/s/user P90 interactivity it delivers **1.7× and 5.3× their throughput per chip, and 2.5× and 7.3× their tokens per dollar**. At its peak it delivers **69M total tokens per $1 TCO, against 46M for B200 running Dynamo SGLang: a 1.5× advantage in tokens per dollar** (SemiAnalysis Rent / 3-Year-Commit cost tier, B200 at $3.7/chip/hr and MI355X at $2.9/chip/hr, as of 2026-09-25).
 
 ![Figure 1](figures/fig1_tco_vs_b200.png)
 
-*Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point.*
+*Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with MoRI UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point.*
 
 ![Figure 2](figures/fig2_tco.png)
 
 *Figure 2: Cost per million total tokens (Rent / 3-Year-Commit tier) at 100 tok/s/user P90 interactivity, DeepSeek-V4-Pro-0813 1.6T agentic, from the public SemiAnalysis InferenceX dashboard (updated 2026-09-28). Shorter bars are cheaper; the figure under each price is the throughput per chip at that interactivity.*
 
-The rest of this post covers in detail how UMBP produces that result.
+The rest of this post covers in detail how MoRI UMBP produces that result.
 
 ## A Quick Recap of the Public AgentX Benchmark
 
@@ -37,7 +37,7 @@ At 96% prefix reuse, *cache management determines prefill cost*. And because the
 
 ## MoRI UMBP + the SGLang KVCache Store Linker
 
-To address those challenges we went back over the problems UMBP had been hitting. UMBP was integrated into SGLang as a **HiCache L3 storage backend**, and on AgentX we made the following observations:
+To address those challenges we went back over the problems MoRI UMBP had been hitting. MoRI UMBP was integrated into SGLang as a **HiCache L3 storage backend**, and on AgentX we made the following observations:
 
 - **Wasted shareable DRAM.** Unsharable HiCache occupies DRAM that could otherwise serve the shareable L3 backend, shrinking effective shareable capacity.
 - **Indirect data path.** Sitting between L1 HBM and the L3 backend, HiCache adds load/offload overhead and blocks a direct L1 ⇔ L3 data path.
@@ -48,20 +48,20 @@ To address those challenges we went back over the problems UMBP had been hitting
 
 ### The KVCache Store Linker
 
-We proposed to the SGLang maintainers an option to bypass HiCache entirely with a direct data path between L1 HBM and external KV cache stores — a direction that turned out to align closely with the community's own plans. The MoRI team then co-designed the **KVCache Store Linker** with the SGLang community, integrating UMBP as a first-class backend. The linker connects SGLang's unified radix tree straight to the distributed DRAM pool. On a prefix match, prefill pulls KV pages from DRAM instead of recomputing them.
+We proposed to the SGLang maintainers an option to bypass HiCache entirely with a direct data path between L1 HBM and external KV cache stores — a direction that turned out to align closely with the community's own plans. The MoRI team then co-designed the **KVCache Store Linker** with the SGLang community, integrating MoRI UMBP as a first-class backend. The linker connects SGLang's unified radix tree straight to the distributed DRAM pool. On a prefix match, prefill pulls KV pages from DRAM instead of recomputing them.
 
-Linker + UMBP resolves all six issues above:
+Linker + MoRI UMBP resolves all six issues above:
 
 - **Fully shareable DRAM** across DP ranks and model instances — enabling DP + round-robin deployments via cross-DP-rank KV cache sharing.
 - **Direct L1 ⇔ L3 path** with no intermediate overhead, improving TTFT by up to 13% over the HiCache path on its own.
-- **Global KV management** — UMBP places and evicts KV based on global information, more effective than per-rank local policies.
+- **Global KV management** — MoRI UMBP places and evicts KV based on global information, more effective than per-rank local policies.
 - **Deduplication + split load/offload by rank**, alleviating memory and PCIe bandwidth pressure. A TP-N prefill now stores and fetches one copy of the replicated MLA/DSA KV instead of N; at TP8, eight keys become one. That multiplies effective DRAM capacity and cuts host traffic by the same factor.
-- **Layer-wise pipelined loading**, with UMBP hiding the added per-layer request overhead via batching, layer grouping, a ranged API, and an optimized GPU gather kernel for host-to-device KV loading.
-- **Cache survives engine restarts** — in UMBP standalone mode the KV pool lives in a separate per-node process, so restarts and upgrades reuse it with no warm-up.
+- **Layer-wise pipelined loading**, with MoRI UMBP hiding the added per-layer request overhead via batching, layer grouping, a ranged API, and an optimized GPU gather kernel for host-to-device KV loading.
+- **Cache survives engine restarts** — in MoRI UMBP standalone mode the KV pool lives in a separate per-node process, so restarts and upgrades reuse it with no warm-up.
 
 ### Results
 
-Replacing HiCache with the UMBP linker, measured end-to-end on the AgentX agentic-coding scenario:
+Replacing HiCache with the MoRI UMBP linker, measured end-to-end on the AgentX agentic-coding scenario:
 
 | Concurrency | Throughput/GPU | P90 TTFT |
 |---|---|---|
@@ -70,11 +70,11 @@ Replacing HiCache with the UMBP linker, measured end-to-end on the AgentX agenti
 
 The TTFT reduction comes from eliminating prefix recomputation on a workload with 96% prefix reuse. No kernel changed.
 
-**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — and the leads over NVIDIA at 100 tok/s/user cited in the introduction rest on these TP4-prefill points.
+**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). MoRI UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs — and the leads over NVIDIA at 100 tok/s/user cited in the introduction rest on these TP4-prefill points.
 
 ![Figure 3](figures/fig4_umbp_tp4_prefill.png)
 
-*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the UMBP linker — GPU HBM prefix cache, UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark block size=6.*
+*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark block size=6.*
 
 The trade-off is prefill time. With half the prefill GPUs, P90 TTFT at concurrency 16–48 rises by 26–53% (2.2–3.6 s → 2.7–5.6 s). For agentic workloads, where the agent waits for the full response and TTFT is a small fraction of it, we take that trade for more throughput per GPU at a fixed per-user decode speed.
 
@@ -104,9 +104,9 @@ This work produced two results.
 
 Peak throughput per GPU also rose from 22.9k to 55.8k (**2.4×**), at concurrency 256.
 
-In an agentic workload, 96% of prompt tokens have already been computed, so the cost per token is set by the system that manages where those tokens live. UMBP is that system: it turns DRAM into a deduplicated KV pool that is shareable across instances and survives engine restarts, wired straight into SGLang's radix tree through the KVCache Store Linker.
+In an agentic workload, 96% of prompt tokens have already been computed, so the cost per token is set by the system that manages where those tokens live. MoRI UMBP is that system: it turns DRAM into a deduplicated KV pool that is shareable across instances and survives engine restarts, wired straight into SGLang's radix tree through the KVCache Store Linker.
 
-The first item on the July roadmap was completing the UMBP integration; that is now delivered. The next is bringing UMBP to the broader ecosystem e.g. ATOM, vLLM, llm-d.
+The first item on the July roadmap was completing the MoRI UMBP integration; that is now delivered. The next is bringing MoRI UMBP to the broader ecosystem e.g. ATOM, vLLM, llm-d.
 
 ## Acknowledgements
 
