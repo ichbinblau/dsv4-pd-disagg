@@ -33,7 +33,11 @@ At 96% prefix reuse, *cache management determines prefill cost*. And because the
 
 ## MoRI UMBP + the SGLang KVCache Store Linker
 
-MoRI UMBP was initially integrated into SGLang as a **HiCache L3 storage backend**. Evaluating this configuration on AgentX against the three challenges above, we made six observations:
+We addressed these three challenges by pairing MoRI UMBP with the SGLang KVCache Store Linker. This section walks through what we observed on AgentX, how the linker was designed in response, and the results it delivered.
+
+### Observations on AgentX
+
+MoRI UMBP was initially integrated into SGLang as a **HiCache L3 storage backend**. Evaluating this configuration on AgentX, we made six observations:
 
 - **Wasted shareable DRAM.** The per-rank L2 host cache occupies DRAM that could otherwise serve the shareable L3 backend, shrinking effective shareable capacity.
 - **Indirect data path.** KV moves between L1 HBM and the L3 backend through the L2 host tier, which adds load/offload overhead and rules out a direct L1 ⇔ L3 data path.
