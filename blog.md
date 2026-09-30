@@ -33,34 +33,23 @@ At 96% prefix reuse, *cache management determines prefill cost*. And because the
 
 ## MoRI UMBP + the SGLang KVCache Store Linker
 
-To address those challenges we went back over the problems MoRI UMBP had been hitting. MoRI UMBP was integrated into SGLang as a **HiCache L3 storage backend**, and on AgentX we made the following observations:
+MoRI UMBP was initially integrated into SGLang as a **HiCache L3 storage backend**. Evaluating this configuration on AgentX against the three challenges above, we made six observations:
 
-- **Wasted shareable DRAM.** Unsharable HiCache occupies DRAM that could otherwise serve the shareable L3 backend, shrinking effective shareable capacity.
-- **Indirect data path.** Sitting between L1 HBM and the L3 backend, HiCache adds load/offload overhead and blocks a direct L1 ⇔ L3 data path.
-- **Per-rank local management.** HiCache is embedded per rank and makes all KV decisions on local information only, which is globally suboptimal.
+- **Wasted shareable DRAM.** The per-rank L2 host cache occupies DRAM that could otherwise serve the shareable L3 backend, shrinking effective shareable capacity.
+- **Indirect data path.** KV moves between L1 HBM and the L3 backend through the L2 host tier, which adds load/offload overhead and rules out a direct L1 ⇔ L3 data path.
+- **Per-rank local management.** Each rank manages its own host cache and makes all KV decisions on local information only, which is globally suboptimal.
 - **Redundant replication.** Under MLA + TP, each TP rank replicates the KV cache and loads/offloads independently, wasting memory and PCIe bandwidth.
-- **No layer-wise pipelining.** HiCache overlaps its L2→L1 load layer by layer, but the fetch from the external L3 backend into L2 is not pipelined — it must complete before compute starts.
-- **Cache dies with the engine.** HiCache lives in the engine process, so any restart discards the host-side cache.
-
-**The data behind these observations.** A controlled A/B isolates the first two. Both arms use the same recipe (1P1D TP8 + TP8, 16 MI355X GPUs, a 600 GB DRAM KV budget, and the `consistent_hashing` router for KV cache affinity); only the KV path differs: **A** is HiCache, **B** is MoRI UMBP behind the KVCache Store Linker. At concurrency 128–256, HBM already serves about 95.6% of prompt tokens in both, so offloading is rarely triggered. Both costs still show up:
-
-- **Wasted shareable DRAM.** HiCache's host pool fills up (72% at concurrency 128, 100% at 256), yet serves at most 0.1% of prompt tokens.
-- **Indirect data path.** With the DRAM tier nearly idle, removing HiCache's staging layer alone gives **+8.3% throughput per GPU and –35% P90 TTFT** at concurrency 256 (+2.7% and –34% at 128).
-
-The gain is **architectural, not from offloading**, and it is what motivated the KVCache Store Linker.
-
-![Figure 2](figures/fig6_hicache_vs_umbp_pareto.png)
-
-*Figure 2: Throughput per GPU vs. P90 interactivity, HiCache (A) vs. MoRI UMBP linker (B), same recipe, concurrency 128 and 256. Up and to the right is better.*
+- **No layer-wise pipelining.** The L2→L1 load overlaps with compute layer by layer, but the fetch from the external L3 backend into L2 is not pipelined — it must complete before compute starts.
+- **Cache dies with the engine.** The host cache lives in the engine process, so any restart discards it.
 
 ### The KVCache Store Linker
 
-We proposed to the SGLang maintainers an option to bypass HiCache entirely with a direct data path between L1 HBM and external KV cache stores — a direction that turned out to align closely with the community's own plans. The MoRI team then co-designed the **KVCache Store Linker** with the SGLang community, integrating MoRI UMBP as a first-class backend. The linker connects SGLang's unified radix tree straight to the distributed DRAM pool. On a prefix match, prefill pulls KV pages from DRAM instead of recomputing them.
+We proposed to the SGLang maintainers an option to bypass the L2 host tier entirely with a direct data path between L1 HBM and external KV cache stores — a direction that turned out to align closely with the community's own plans. The MoRI team then co-designed the **KVCache Store Linker** with the SGLang community, integrating MoRI UMBP as a first-class backend. The linker connects SGLang's unified radix tree straight to the distributed DRAM pool. On a prefix match, prefill pulls KV pages from DRAM instead of recomputing them.
 
 Linker + MoRI UMBP resolves all six issues above:
 
 - **Fully shareable DRAM** across DP ranks and model instances — enabling DP + round-robin deployments via cross-DP-rank KV cache sharing.
-- **Direct L1 ⇔ L3 path** with no intermediate overhead, improving TTFT by up to 13% over the HiCache path on its own.
+- **Direct L1 ⇔ L3 path** with no intermediate overhead; on its own, this improves TTFT by up to 13% over running without MoRI UMBP.
 - **Global KV management** — MoRI UMBP places and evicts KV based on global information, more effective than per-rank local policies.
 - **Deduplication + split load/offload by rank**, alleviating memory and PCIe bandwidth pressure. A TP-N prefill now stores and fetches one copy of the replicated MLA/DSA KV instead of N; at TP8, eight keys become one. That multiplies effective DRAM capacity and cuts host traffic by the same factor.
 - **Layer-wise pipelined loading**, with MoRI UMBP hiding the added per-layer request overhead via batching, layer grouping, a ranged API, and an optimized GPU gather kernel for host-to-device KV loading.
@@ -68,22 +57,20 @@ Linker + MoRI UMBP resolves all six issues above:
 
 ### Results
 
-Replacing HiCache with the MoRI UMBP linker, measured end-to-end on the AgentX agentic-coding scenario:
+**These fixes pay off even when the DRAM tier is barely used.** In an on/off run with the same recipe (1P1D TP8 + TP8, 16 MI355X GPUs, a 600 GB DRAM KV budget, and the `consistent_hashing` router for KV cache affinity), HBM already serves about 95.6% of prompt tokens at concurrency 128–256 and the DRAM tier less than 1%. Turning MoRI UMBP on still gives **+8.3% throughput per GPU and –35% P90 TTFT** at concurrency 256, and +2.7% and –34% at 128 (Figure 2). This gain is **architectural, not from offloading**, and it maps directly to two of the observations above:
 
-| Concurrency | Throughput/GPU | P90 TTFT |
-|---|---|---|
-| 192 | **+14%** | **–66%** (35.3 s → 11.9 s) |
-| 256 | +9.7% | –51% |
+- **Wasted shareable DRAM.** With MoRI UMBP off, the host KV pool still fills up (72% at concurrency 128, 100% at 256) while serving at most 0.1% of prompt tokens. MoRI UMBP on turns that DRAM into one shareable pool instead.
+- **Indirect data path.** With the DRAM tier nearly idle in both runs, the gain comes from the linker's direct HBM ⇔ DRAM path, which removes the intermediate staging layer and its load/offload overhead.
 
-The TTFT reduction comes from eliminating prefix recomputation on a workload with 96% prefix reuse. No kernel changed.
+![Figure 2](figures/fig6_umbp_on_off_pareto.png)
+
+*Figure 2: Throughput per GPU vs. P90 interactivity with MoRI UMBP off and on, same recipe, concurrency 128 and 256. Up and to the right is better.*
 
 **A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). MoRI UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs.
 
 ![Figure 3](figures/fig4_umbp_tp4_prefill.png)
 
-*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark block size=6.*
-
-The trade-off is prefill time. With half the prefill GPUs, P90 TTFT at concurrency 16–48 rises by 26–53% (2.2–3.6 s → 2.7–5.6 s). For agentic workloads, where the agent waits for the full response and TTFT is a small fraction of it, we take that trade for more throughput per GPU at a fixed per-user decode speed.
+*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs). 
 
 ## Further Optimizations
 
