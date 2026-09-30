@@ -78,7 +78,7 @@ Linker + MoRI UMBP resolves all six issues above:
 
 ## Further Optimizations
 
-Alongside this, the AMD SGLang team continues to deliver optimizations for DeepSeek-V4-Pro, covering the following areas.
+Alongside this, the AMD SGLang team continues to deliver optimizations for DeepSeek-V4-Pro-0813, covering the following areas.
 
 - **FP4 sparse-attention indexer** . DeepSeek-V4's DSA indexer scores the whole context for every query token at every layer, and carries its own per-token KV. Running it on AITER FP4 kernels on gfx950 cuts that KV from **132 B to 68 B per token** — more concurrent sequences in HBM, less indexer bandwidth per decode step, and fewer bytes over the MoRI link.
 - **Optimistic prefill with request-owned speculative KV** . In PD disaggregation a request normally waits for decode to bootstrap it before prefill can start; at high concurrency that handshake is pure queueing time. Letting prefill start optimistically, with the speculative KV owned by the request rather than a pre-reserved decode slot, cut **P90 TTFT by 27.7% at concurrency 256**. Removing a host sync from DSpark prefill slot expansion cut P90 TTFT a further **13–16%** at concurrency 128–256.
