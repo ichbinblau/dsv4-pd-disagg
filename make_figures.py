@@ -180,9 +180,53 @@ def fig5_c192_summary():
     plt.close(fig)
 
 
+def fig6_hicache_vs_umbp():
+    # Controlled A/B, 2026-09-17 (hicache_vs_umbp_dspark_g3_ab_20260917): same
+    # 1P1D TP8+TP8 recipe, consistent_hashing router, 600 GB DRAM; only the KV
+    # offload backend differs. conc: (tput/GPU tok/s, P90 interactivity tok/s/user)
+    # c256 UMBP result JSON is truncated in the archive: 815,254 tok/s / 16 GPUs
+    # and 1000 / 22.75 ms P90 TPOT from the run summary.
+    hicache = {128: (30698, 61.77), 256: (47054, 42.44)}
+    umbp = {128: (31518, 61.74), 256: (50953, 43.96)}
+    dark_red = "#A32A22"  # deuteranopia-safe against SOFT_GREEN
+
+    fig, ax = plt.subplots(figsize=(9, 5.6))
+    series = [
+        (hicache, "A: SGLang HiCache", dark_red, "o", "--", (-12, -4), "right"),
+        (umbp, "B: MoRI UMBP linker", SOFT_GREEN, "D", "-", (10, -4), "left"),
+    ]
+    for data, label, color, marker, ls, off, ha in series:
+        pts = sorted(data.items(), key=lambda kv: kv[1][1])
+        ax.plot([v[1] for _, v in pts], [v[0] for _, v in pts], ls, color=color,
+                marker=marker, lw=2, ms=8, mec="white", mew=1.5, label=label)
+        for c, (y, x) in data.items():
+            ax.annotate(f"c{c}", (x, y), textcoords="offset points", xytext=off,
+                        ha=ha, fontsize=9, color=DARK)
+    for c in (128, 256):
+        (ya, xa), (yb, xb) = hicache[c], umbp[c]
+        ttft = {128: "–34%", 256: "–35%"}[c]
+        above = c == 256
+        ax.annotate(f"+{(yb / ya - 1) * 100:.1f}% tput/GPU\n{ttft} P90 TTFT",
+                    (xb, yb if above else ya), textcoords="offset points",
+                    xytext=(0, 14 if above else -22), ha="center",
+                    va="bottom" if above else "top", fontsize=9, color=DARK)
+    ax.set_xlim(37, 66)
+    ax.set_ylim(24000, 56000)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v / 1000:.0f}k"))
+    ax.set_xlabel("P90 interactivity (tok/s/user)")
+    ax.set_ylabel("Token throughput per GPU (tok/s)")
+    ax.set_title("HiCache vs. MoRI UMBP linker, same recipe "
+                 "(DeepSeek-V4-Pro FP4, 1P1D TP8 + TP8, 16× MI355X)", fontsize=11)
+    ax.legend(loc="upper right", frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "fig6_hicache_vs_umbp_pareto.png"), dpi=200)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     fig1_pareto()
     fig2_waterfall()
     fig3_umbp()
     fig5_c192_summary()
+    fig6_hicache_vs_umbp()
     print("wrote", sorted(os.listdir(OUT)))

@@ -46,6 +46,17 @@ To address those challenges we went back over the problems MoRI UMBP had been hi
 - **No layer-wise pipelining.** HiCache overlaps its L2→L1 load layer by layer, but the fetch from the external L3 backend into L2 is not pipelined — it must complete before compute starts.
 - **Cache dies with the engine.** HiCache lives in the engine process, so any restart discards the host-side cache.
 
+**The data behind these observations.** A controlled A/B isolates the first two. Both arms use the same recipe (1P1D TP8 + TP8, 16 MI355X GPUs, a 600 GB DRAM KV budget, and the `consistent_hashing` router for KV cache affinity); only the KV path differs: **A** is HiCache, **B** is MoRI UMBP behind the KVCache Store Linker. At concurrency 128–256, HBM already serves about 95.6% of prompt tokens in both, so offloading is rarely triggered. Both costs still show up:
+
+- **Wasted shareable DRAM.** HiCache's host pool fills up (72% at concurrency 128, 100% at 256), yet serves at most 0.1% of prompt tokens.
+- **Indirect data path.** With the DRAM tier nearly idle, removing HiCache's staging layer alone gives **+8.3% throughput per GPU and –35% P90 TTFT** at concurrency 256 (+2.7% and –34% at 128).
+
+The gain is **architectural, not from offloading**, and it is what motivated the KVCache Store Linker.
+
+![Figure 3](figures/fig6_hicache_vs_umbp_pareto.png)
+
+*Figure 3: Throughput per GPU vs. P90 interactivity, HiCache (A) vs. MoRI UMBP linker (B), same recipe, concurrency 128 and 256. Up and to the right is better.*
+
 ### The KVCache Store Linker
 
 We proposed to the SGLang maintainers an option to bypass HiCache entirely with a direct data path between L1 HBM and external KV cache stores — a direction that turned out to align closely with the community's own plans. The MoRI team then co-designed the **KVCache Store Linker** with the SGLang community, integrating MoRI UMBP as a first-class backend. The linker connects SGLang's unified radix tree straight to the distributed DRAM pool. On a prefix match, prefill pulls KV pages from DRAM instead of recomputing them.
@@ -68,13 +79,13 @@ Replacing HiCache with the MoRI UMBP linker, measured end-to-end on the AgentX a
 | 192 | **+14%** | **–66%** (35.3 s → 11.9 s) |
 | 256 | +9.7% | –51% |
 
-The TTFT reduction comes from eliminating prefix recomputation on a workload with 96% prefix reuse. No kernel changed.
+No kernel changed. Part of that gain is the obvious one: once HBM overflows, prefix hits served from DRAM replace recomputation. But, as the controlled A/B above shows (Figure 3), the linker wins even when the DRAM tier is almost idle.
 
 **A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). MoRI UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs.
 
-![Figure 3](figures/fig4_umbp_tp4_prefill.png)
+![Figure 4](figures/fig4_umbp_tp4_prefill.png)
 
-*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark block size=6.*
+*Figure 4: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs). The Sep 25 arms also include optimistic prefill and the SGLang v0.5.20 image; concurrency 16 additionally uses DSpark block size=6.*
 
 The trade-off is prefill time. With half the prefill GPUs, P90 TTFT at concurrency 16–48 rises by 26–53% (2.2–3.6 s → 2.7–5.6 s). For agentic workloads, where the agent waits for the full response and TTFT is a small fraction of it, we take that trade for more throughput per GPU at a fixed per-user decode speed.
 
@@ -86,9 +97,9 @@ Alongside this, the AMD SGLang team continues to deliver optimizations for DeepS
 - **Optimistic prefill with request-owned speculative KV** . In PD disaggregation a request normally waits for decode to bootstrap it before prefill can start; at high concurrency that handshake is pure queueing time. Letting prefill start optimistically, with the speculative KV owned by the request rather than a pre-reserved decode slot, cut **P90 TTFT by 27.7% at concurrency 256**. Removing a host sync from DSpark prefill slot expansion cut P90 TTFT a further **13–16%** at concurrency 128–256.
 - **Per-stream split-K for MLA decode**  picks the split-K factor per index stream instead of applying one setting to layers whose KV lengths differ by orders of magnitude.
 
-![Figure 4](figures/fig3_pareto_0821_vs_0925.png)
+![Figure 5](figures/fig3_pareto_0821_vs_0925.png)
 
-*Figure 4: Throughput per GPU vs. P90 interactivity across the optimization campaign. The Aug 21 baseline uses 16 GPUs (1P1D, TP8 + TP8) at every point; the optimized recipes pick 8, 12 or 16 GPUs per concurrency and report throughput normalized per GPU.*
+*Figure 5: Throughput per GPU vs. P90 interactivity across the optimization campaign. The Aug 21 baseline uses 16 GPUs (1P1D, TP8 + TP8) at every point; the optimized recipes pick 8, 12 or 16 GPUs per concurrency and report throughput normalized per GPU.*
 
 ## Summary
 
@@ -96,11 +107,11 @@ This work produced two results.
 
 **First, against NVIDIA Blackwell systems.** On the public AgentX leaderboard, at the same per-user speed, MI355X beats B300 on both throughput per chip (1.8×) and tokens per dollar (2.6×), and GB200 NVL72 on tokens per dollar (1.06×) (Figure 2).
 
-**Second, against ourselves a month earlier.** On the same benchmark at the same concurrency of 192, throughput, TTFT and interactivity all improved substantially (Figure 5).
+**Second, against ourselves a month earlier.** On the same benchmark at the same concurrency of 192, throughput, TTFT and interactivity all improved substantially (Figure 6).
 
-![Figure 5](figures/fig5_c192_aug_vs_sep.png)
+![Figure 6](figures/fig5_c192_aug_vs_sep.png)
 
-*Figure 5: MI355X at concurrency 192, [Aug 21 baseline](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4) vs. [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1). Left to right: throughput per GPU, P90 TTFT (lower is better) and P90 interactivity.*
+*Figure 6: MI355X at concurrency 192, [Aug 21 baseline](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4) vs. [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1). Left to right: throughput per GPU, P90 TTFT (lower is better) and P90 interactivity.*
 
 Peak throughput per GPU also rose from 22.9k to 55.8k (**2.4×**), at concurrency 256.
 
