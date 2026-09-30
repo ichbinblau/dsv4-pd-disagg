@@ -174,7 +174,7 @@ def fig5_c192_summary():
         ax.set_ylim(0, top * 1.18)
         ax.set_title(f"{title}: {change}")
         ax.grid(axis="x", visible=False)
-    fig.suptitle("DeepSeek-V4-Pro FP4 agentic on MI355X at concurrency 192", fontsize=12)
+    fig.suptitle("DeepSeek-V4-Pro-0813 FP4 agentic on MI355X at concurrency 192", fontsize=12)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "fig5_c192_aug_vs_sep.png"), dpi=200)
     plt.close(fig)
