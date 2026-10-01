@@ -31,9 +31,9 @@ At 96% prefix reuse, *cache management determines prefill cost*. And because the
 - **The KV cache is not sharded across TP ranks.** Under DeepSeek-V4 sparse attention, the MLA latent and DSA indexer KV are replicated in full on every rank.
 - **Cache warmth is not free.** A host cache that lives inside the engine process is lost on every restart, and on every rolling upgrade.
 
-## MoRI UMBP + HiCache
+## MoRI UMBP + the SGLang KVCache Store Linker
 
-We addressed these three challenges by pairing MoRI UMBP with HiCache. This section walks through what we observed on AgentX, how the linker was designed in response, and the results it delivered.
+We addressed these three challenges by pairing MoRI UMBP with the SGLang KVCache Store Linker. This section walks through what we observed on AgentX, how the linker was designed in response, and the results it delivered.
 
 ### Observations on AgentX
 
@@ -46,7 +46,7 @@ MoRI UMBP was initially integrated into SGLang as a **HiCache L3 storage backend
 - **No layer-wise pipelining.** The L2→L1 load overlaps with compute layer by layer, but the fetch from the external L3 backend into L2 is not pipelined — it must complete before compute starts.
 - **Cache dies with the engine.** The host cache lives in the engine process, so any restart discards it.
 
-### A Direct Data Path
+### The KVCache Store Linker
 
 We proposed to the SGLang maintainers an option to bypass the L2 host tier entirely with a direct data path between L1 HBM and external KV cache stores — a direction that turned out to align closely with the community's own plans. The MoRI team then co-designed the **KVCache Store Linker** with the SGLang community, integrating MoRI UMBP as a first-class backend. The linker connects SGLang's unified radix tree straight to the distributed DRAM pool. On a prefix match, prefill pulls KV pages from DRAM instead of recomputing them.
 
