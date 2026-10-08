@@ -5,6 +5,7 @@ p90_full_response_intvty, p90_ttft, server_*_cache_hit_rate) for:
   baseline  official InferenceX run of 2026-08-21 (v0.5.17 image)
   pr2823    run 34926284365 (InferenceX #2823, merged 2026-09-16)
   pr3256    run 35879254139 (InferenceX #3256)
+  pr3664    run 37181045340 (InferenceX #3664, merged 2026-10-04)
   s1..s4    intermediate PR #2823 sweeps 33837253408, 34368415051,
             34550987258, 34615909904
 """
@@ -117,11 +118,11 @@ def fig2_waterfall():
 
 def fig3_umbp():
     concs = ["c16", "c32", "c48"]
-    gpu_hit = [67.5, 45.7, 21.8]
-    dram_hit = [29.7, 51.7, 75.4]
-    miss = [2.8, 2.5, 2.8]
+    gpu_hit = [63.3, 26.4, 21.9]
+    dram_hit = [33.9, 71.1, 75.4]
+    miss = [2.3, 1.9, 2.1]
     tp8 = [6133, 12738, 17272]   # Sep 15: TP8 prefill + TP8 decode, 16 GPUs
-    tp4 = [8246, 15948, 21407]   # Sep 25: TP4 prefill + TP8 decode + MoRI UMBP, 12 GPUs
+    tp4 = [8238, 16407, 21718]   # Oct 4: TP4 prefill + TP8 decode + MoRI UMBP, 12 GPUs
 
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12, 4.8))
     x = range(len(concs))
@@ -141,7 +142,7 @@ def fig3_umbp():
 
     w = 0.38
     ax2.bar([i - w / 2 for i in x], tp8, w, color=SOFT_RED, label="Sep 15: TP8 prefill, 16 GPUs")
-    ax2.bar([i + w / 2 for i in x], tp4, w, color=SOFT_GREEN, label="Sep 25: TP4 prefill + MoRI UMBP, 12 GPUs")
+    ax2.bar([i + w / 2 for i in x], tp4, w, color=SOFT_GREEN, label="Oct 4: TP4 prefill + MoRI UMBP, 12 GPUs")
     for i in x:
         ax2.text(i + w / 2, tp4[i] + 400, f"+{(tp4[i] / tp8[i] - 1) * 100:.0f}%",
                  ha="center", fontsize=9)
@@ -156,11 +157,11 @@ def fig3_umbp():
 
 
 def fig5_c192_summary():
-    # concurrency 192: Aug 21 baseline vs. Sep 25 (run 35879254139)
+    # concurrency 192: Aug 21 baseline vs. Oct 4 (run 37181045340)
     panels = [
-        ("Throughput per GPU", "tok/s", 22932, 46563, lambda v: f"{v / 1000:.1f}k", "2.03×"),
-        ("P90 TTFT (lower is better)", "s", 33.6, 11.8, lambda v: f"{v:.1f} s", "–65%"),
-        ("P90 interactivity", "tok/s/user", 23.5, 59.3, lambda v: f"{v:.1f}", "2.5×"),
+        ("Throughput per GPU", "tok/s", 22932, 49430, lambda v: f"{v / 1000:.1f}k", "2.16×"),
+        ("P90 TTFT (lower is better)", "s", 33.6, 11.3, lambda v: f"{v:.1f} s", "–66%"),
+        ("P90 interactivity", "tok/s/user", 23.5, 69.2, lambda v: f"{v:.1f}", "2.9×"),
     ]
     fig, axes = plt.subplots(1, 3, figsize=(12, 4.2))
     for ax, (title, unit, before, after, fmt, change) in zip(axes, panels):
@@ -169,14 +170,14 @@ def fig5_c192_summary():
         for x, v in zip([0, 1], [before, after]):
             ax.text(x, v + top * 0.02, fmt(v), ha="center", fontsize=10)
         ax.set_xticks([0, 1])
-        ax.set_xticklabels(["Aug 21", "Sep 25"])
+        ax.set_xticklabels(["Aug 21", "Oct 4"])
         ax.set_ylabel(unit)
         ax.set_ylim(0, top * 1.18)
         ax.set_title(f"{title}: {change}")
         ax.grid(axis="x", visible=False)
     fig.suptitle("DeepSeek-V4-Pro-0813 FP4 agentic on MI355X at concurrency 192", fontsize=12)
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "fig5_c192_aug_vs_sep.png"), dpi=200)
+    fig.savefig(os.path.join(OUT, "fig5_c192_aug_vs_oct.png"), dpi=200)
     plt.close(fig)
 
 

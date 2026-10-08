@@ -1,14 +1,14 @@
 # MoRI UMBP Empowers AMD Instinct™ MI355X to Demonstrate Token-per-Dollar TCO Leadership on the Public AgentX Leaderboard
 
-*September 2026*
+*October 2026*
 
 Agentic applications run long multi-turn sessions, which makes the cost of serving them depend overwhelmingly on how much KV cache the server can reuse instead of recomputing.
 
-In July, together with Moonshot AI, we introduced **SGLang + MoRI UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). MoRI UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem with the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with MoRI UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now delivers, at its peak, **69M total tokens per $1 TCO, against 46M for NVIDIA B200 running Dynamo SGLang: a 1.5× advantage in tokens per dollar**, and outperforms NVIDIA GB200, B300 and GB300 at some interactivity levels (SemiAnalysis, updated 2026-09-25).
+In July, together with Moonshot AI, we introduced **SGLang + MoRI UMBP** (Unified Memory & Bandwidth Pool) in [*Rebuilding Agentic AI from First Principles for AMD GPU*](https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html). MoRI UMBP is a KV cache infrastructure built by the AMD MoRI team from first principles, starting from the agentic workload itself and purpose-built for the AMD platform. Over the past month we have contributed that work to the SGLang community, where it lands in the open-source ecosystem with the new KVCache Store Linker, so the whole community benefits. On the public SemiAnalysis AgentX benchmark with DeepSeek-V4-Pro-0813 1.6T, AMD MI355X — running MoRI disaggregation with MoRI UMBP as the unified KV cache pool, on top of AMD's ongoing optimization work in the SGLang community — now delivers, at its peak, **96M total tokens per $1 TCO, against 46M for NVIDIA B200 running Dynamo SGLang: a 2.1× advantage in tokens per dollar**, and outperforms NVIDIA GB200, B300 and GB300 at some interactivity levels (SemiAnalysis, updated 2026-10-04).
 
 ![Figure 1](figures/fig1_tco_vs_b200.png)
 
-*Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-09-25). Red is MI355X FP4 with MoRI UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point.*
+*Figure 1: DeepSeek-V4-Pro-0813 1.6T agentic total tokens per $1 TCO vs. P90 interactivity, from the public SemiAnalysis InferenceX dashboard (Rent / 3-Year-Commit tier, updated 2026-10-04). Red is MI355X FP4 with MoRI UMBP + MoRI + SGLang; the green curves are the NVIDIA field — B200, B300, H200, GB200 and GB300 NVL72, plus a Vera Rubin NVL72 preview. Up and to the right is better; labels show the parallelism layout of each point.*
 
 The rest of this post covers in detail how MoRI UMBP produces that result.
 
@@ -70,11 +70,11 @@ Linker + MoRI UMBP resolves all six issues above:
 
 *Figure 2: Throughput per GPU vs. P90 interactivity with MoRI UMBP off and on, same recipe, concurrency 128 and 256. Up and to the right is better.*
 
-**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). MoRI UMBP serves 30%, 52% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 24–34% on 25% fewer GPUs.
+**A large enough cache changes the topology.** Once the deduplicated DRAM tier is in place, prefill no longer needs TP8 simply to hold KV. At concurrency 16–48 we run a **TP4 prefill with a TP8 decode (12 GPUs)** instead of TP8 + TP8 (16 GPUs). MoRI UMBP serves 34%, 71% and 75% of prompt tokens at concurrency 16, 32 and 48, while less than 3% are recomputed. Throughput per GPU rises 26–34% on 25% fewer GPUs.
 
 ![Figure 3](figures/fig4_umbp_tp4_prefill.png)
 
-*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the Sep 25 recipe (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs). 
+*Figure 3: Left: where the TP4 prefill finds the KV for each prompt token under the MoRI UMBP linker — GPU HBM prefix cache, MoRI UMBP DRAM tier, or recomputation. As concurrency grows and HBM evicts more, the DRAM tier absorbs the difference. Right: throughput per GPU of the [Sep 15 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/34926284365) (TP8 prefill + TP8 decode, 16 GPUs) vs. the [Oct 4 recipe](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37181045340/attempts/1) (TP4 prefill + MoRI UMBP + TP8 decode, 12 GPUs).* 
 
 ## Further Optimizations
 
@@ -83,8 +83,9 @@ Alongside this, the AMD SGLang team continues to deliver optimizations for DeepS
 - **FP4 sparse-attention indexer** . DeepSeek-V4's DSA indexer scores the whole context for every query token at every layer, and carries its own per-token KV. Running it on AITER FP4 kernels on gfx950 cuts that KV from **132 B to 68 B per token** — more concurrent sequences in HBM, less indexer bandwidth per decode step, and fewer bytes over the MoRI link.
 - **Optimistic prefill with request-owned speculative KV** . In PD disaggregation a request normally waits for decode to bootstrap it before prefill can start; at high concurrency that handshake is pure queueing time. Letting prefill start optimistically, with the speculative KV owned by the request rather than a pre-reserved decode slot, cut **P90 TTFT by 27.7% at concurrency 256**. Removing a host sync from DSpark prefill slot expansion cut P90 TTFT a further **13–16%** at concurrency 128–256.
 - **Per-stream split-K for MLA decode**  picks the split-K factor per index stream instead of applying one setting to layers whose KV lengths differ by orders of magnitude.
+- **MegaMoE prefill with an FP8 KV cache** ([InferenceX#3664](https://github.com/SemiAnalysisAI/InferenceX/pull/3664)). At concurrency 192–512, prefill runs AITER MegaMoEv2 with 8-way expert parallelism ([sglang#35619](https://github.com/sgl-project/sglang/pull/35619)), and the DeepSeek-V4 KV pool is split into an FP8 NoPE part and a BF16 RoPE part. Together with the SGLang v0.5.21 image, this raised throughput per GPU at concurrency 256 from 55.8k to 62.0k (+11%) and extended the curve to concurrency 384 and 512.
 
-![Figure 4](figures/fig3_pareto_0821_vs_0925.png)
+![Figure 4](figures/fig3_pareto_0821_vs_1004.png)
 
 *Figure 4: Throughput per GPU vs. P90 interactivity across the optimization campaign. The Aug 21 baseline uses 16 GPUs (1P1D, TP8 + TP8) at every point; the optimized recipes pick 8, 12 or 16 GPUs per concurrency and report throughput normalized per GPU.*
 
@@ -92,15 +93,15 @@ Alongside this, the AMD SGLang team continues to deliver optimizations for DeepS
 
 This work produced two results.
 
-**First, against NVIDIA Blackwell systems.** On the public AgentX leaderboard, MI355X peaks at 69M total tokens per $1 TCO, against 46M for B200 running Dynamo SGLang: 1.5× the tokens per dollar (Figure 1).
+**First, against NVIDIA Blackwell systems.** On the public AgentX leaderboard, MI355X peaks at 96M total tokens per $1 TCO, against 46M for B200 running Dynamo SGLang: 2.1× the tokens per dollar (Figure 1).
 
-**Second, against ourselves a month earlier.** On the same benchmark at the same concurrency of 192, throughput, TTFT and interactivity all improved substantially (Figure 5).
+**Second, against ourselves six weeks earlier.** On the same benchmark, the Oct 4 curve sits well above the Aug 21 baseline at every interactivity level (Figure 5). At the same concurrency of 192, throughput per GPU rose 2.2× (22.9k → 49.4k), P90 TTFT fell 66% (33.6 s → 11.3 s), and P90 interactivity rose 2.9× (23.5 → 69.2 tok/s/user).
 
-![Figure 5](figures/fig5_c192_aug_vs_sep.png)
+![Figure 5](figures/fig5_c192_aug_vs_oct.png)
 
-*Figure 5: MI355X at concurrency 192, [Aug 21 baseline](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4) vs. [Sep 25 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1). Left to right: throughput per GPU, P90 TTFT (lower is better) and P90 interactivity.*
+*Figure 5: MI355X token throughput per GPU vs. P90 interactivity, [Aug 21 baseline](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4) vs. [Oct 4 run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37181045340/attempts/1), from the public SemiAnalysis InferenceX dashboard. Up and to the right is better; labels show the parallelism layout of each point.*
 
-Peak throughput per GPU also rose from 22.9k to 55.8k (**2.4×**), at concurrency 256.
+Peak throughput per GPU also rose from 22.9k to 77.3k (**3.4×**), with the peak moving from concurrency 192 to 512.
 
 In an agentic workload, 96% of prompt tokens have already been computed, so the cost per token is set by the system that manages where those tokens live. MoRI UMBP is that system: it turns DRAM into a deduplicated KV pool that is shareable across instances and survives engine restarts, wired straight into SGLang's radix tree through the KVCache Store Linker.
 
