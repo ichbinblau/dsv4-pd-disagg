@@ -106,7 +106,7 @@ Thanks to the SGLang community for design reviews and quick upstreaming, to Semi
 1. SemiAnalysis InferenceX, DeepSeek-V4 dashboard. https://inferencex.semianalysis.com/inference/deepseek-v4
 2. SemiAnalysis AI Cloud TCO Model (source of the $/GPU/hr rates). https://semianalysis.com/ai-cloud-tco-model/
 3. AMD, *Rebuilding Agentic AI from First Principles for AMD GPU*, with Moonshot AI. https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html
-4. MoRI UMBP on DeepSeek-V4 PD disaggregation (earlier post). https://github.com/ichbinblau/dsv4-pd-disagg
+4. MoRI UMBP on DeepSeek-V4 PD disaggregation (earlier post). https://github.com/ichbinblau/dsv4-pd-disagg/tree/main/dsv4-umbp
 5. InferenceX recipe history for this benchmark: PRs [#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823), [#3188](https://github.com/SemiAnalysisAI/InferenceX/pull/3188), [#3256](https://github.com/SemiAnalysisAI/InferenceX/pull/3256), [#3664](https://github.com/SemiAnalysisAI/InferenceX/pull/3664), [#4186](https://github.com/SemiAnalysisAI/InferenceX/pull/4186), [#4571](https://github.com/SemiAnalysisAI/InferenceX/pull/4571).
 
 *Methodology: numbers come from the InferenceX public API (`/api/v1/benchmarks?model=DeepSeek-V4-Pro`), retrieved 2026-10-30. The snapshots and the script that generates every figure and table are in `data/` and `make_figures.py`. Same-interactivity values use InferenceX's `iso_interactivity.py`, which ports the dashboard's interpolation.*

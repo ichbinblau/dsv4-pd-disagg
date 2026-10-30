@@ -106,7 +106,7 @@ MoRI UMBP 和 KVCache Store Linker 已经合入 SGLang 上游，AITER kernel 随
 1. SemiAnalysis InferenceX，DeepSeek-V4 dashboard。https://inferencex.semianalysis.com/inference/deepseek-v4
 2. SemiAnalysis AI Cloud TCO Model（$/GPU/hr 价格来源）。https://semianalysis.com/ai-cloud-tco-model/
 3. AMD，*Rebuilding Agentic AI from First Principles for AMD GPU*，与 Moonshot AI 联合发布。https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html
-4. MoRI UMBP 在 DeepSeek-V4 PD 分离上的实践（前一篇文章）。https://github.com/ichbinblau/dsv4-pd-disagg
+4. MoRI UMBP 在 DeepSeek-V4 PD 分离上的实践（前一篇文章）。https://github.com/ichbinblau/dsv4-pd-disagg/tree/main/dsv4-umbp
 5. 本基准的 InferenceX 配方演进：PR [#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823)、[#3188](https://github.com/SemiAnalysisAI/InferenceX/pull/3188)、[#3256](https://github.com/SemiAnalysisAI/InferenceX/pull/3256)、[#3664](https://github.com/SemiAnalysisAI/InferenceX/pull/3664)、[#4186](https://github.com/SemiAnalysisAI/InferenceX/pull/4186)、[#4571](https://github.com/SemiAnalysisAI/InferenceX/pull/4571)。
 
 *方法说明：数字取自 InferenceX 公开 API（`/api/v1/benchmarks?model=DeepSeek-V4-Pro`），获取于 2026-10-30。数据快照和生成全部图表、表格的脚本在 `data/` 和 `make_figures.py`。相同交互速度下的数值用 InferenceX 的 `iso_interactivity.py` 计算，它移植自 dashboard 的插值算法。*
