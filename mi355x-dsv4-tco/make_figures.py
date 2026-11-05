@@ -383,6 +383,56 @@ def fig_c192():
         plt.close(fig)
 
 
+SUBMISSIONS = [
+    ("2026-08-21", "Aug 21", "Baseline"),
+    ("2026-09-17", "Sep 17", "FP4 indexer\nDSpark"),
+    ("2026-09-25", "Sep 25", "TP4 prefill\noptimistic prefill"),
+    ("2026-10-04", "Oct 4", "MegaMoE\nFP8 KV"),
+    ("2026-10-21", "Oct 21", "v0.5.22, EPLB\nP2C routing"),
+    ("2026-10-28", "Oct 28", "ROCm 10"),
+]
+
+
+def fig_timeline():
+    """Throughput per GPU of each MoRI-SGLang submission: the peak, and the value at
+    70 tok/s/user read off that run's frontier with the dashboard's interpolation."""
+    from datetime import date as _d
+    days = [(_d.fromisoformat(d) - _d(2026, 8, 21)).days for d, _, _ in SUBMISSIONS]
+    peak, at70 = [], []
+    for d, _, _ in SUBMISSIONS:
+        pts = mori(d)
+        peak.append(max(p["throughput"] for p in pts))
+        at70.append(iso(pts, 70))
+    with plt.rc_context({"font.family": DASH_FONT}):
+        fig, ax = plt.subplots(figsize=(12, 5.6), facecolor="#eaebec")
+        fig.subplots_adjust(left=0.07, right=0.98, top=0.80, bottom=0.17)
+        _dash_axes(ax)
+        ax.grid(True, axis="x", color="#d3d6db", lw=0.9)
+        for ys, color, label, dy in [(peak, "#970004", "Peak", 10),
+                                     (at70, "#f36358", "At 70 tok/s/user", -16)]:
+            ax.plot(days, ys, "-o", color=color, lw=2.2, ms=7, mec="#eaebec", mew=1.5, zorder=4)
+            for x, y in zip(days, ys):
+                # keep the label off the x-axis tick labels for points near zero
+                ax.annotate(f"{y / 1000:.1f}k", (x, y), textcoords="offset points",
+                            xytext=(0, dy if y > 10000 else abs(dy)),
+                            ha="center", va="center", fontsize=9.5, fontweight="bold", color="#1f1f1f",
+                            zorder=6, bbox=dict(boxstyle="square,pad=0.1", fc="#eaebec", ec="none"))
+            ax.annotate(label, (days[-1], ys[-1]), textcoords="offset points", xytext=(12, 0),
+                        ha="left", va="center", fontsize=10.5, fontweight="bold", color=color)
+        ax.set_xlim(-3, days[-1] + 14)
+        ax.set_ylim(0, 92000)
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: "0" if v == 0 else f"{v / 1000:.0f}k"))
+        ax.set_ylabel("Token throughput per GPU (tok/s)", fontsize=11, color="#2b2b2b")
+        ax.set_xticks(days)
+        ax.set_xticklabels([f"{short}\n{what}" for _, short, what in SUBMISSIONS], fontsize=9.5)
+        fig.text(0.02, 0.92, "Six Submissions in Ten Weeks: DeepSeek V4 Pro 0813 on MI355X (MoRI SGLang)",
+                 fontsize=15, fontweight="bold", color="#1f1f1f")
+        fig.text(0.02, 0.865, "Throughput per GPU at each run's peak and at 70 tok/s/user P90 interactivity. "
+                 "Same MI355X hardware throughout; only software changed.", fontsize=10.5, color="#4a4a4a")
+        fig.savefig(os.path.join(OUT, "submission-timeline.png"), dpi=170, facecolor="#eaebec")
+        plt.close(fig)
+
+
 def tables(tiers):
     print("## iso-interactivity tokens per $1 TCO (millions), Rent | Own; tput/GPU")
     mi = series("mi355x")
@@ -415,6 +465,6 @@ if __name__ == "__main__":
     # Figure 1 is now a dashboard screenshot; fig_tco_frontier() would overwrite it.
     fig_iso_ratio(tiers)
     # Figure 3 is now a dashboard screenshot; fig_progress() would overwrite it.
-    fig_c192()
+    fig_timeline()
     tables([60, 65, 70, 80, 90, 100, 120, 150])
     print("wrote", sorted(os.listdir(OUT)))
