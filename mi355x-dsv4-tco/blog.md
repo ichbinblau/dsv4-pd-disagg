@@ -2,11 +2,11 @@
 
 *November 2026*
 
-On Aug 21, our first full DeepSeek-V4-Pro (1.6T, FP4) AgentX submission on AMD Instinct MI355X peaked at 22.9k tokens/s per GPU. On Oct 28, the same hardware peaked at 79.8k. Counting both ends, that is six public submissions; after mid-September a new one landed every one to two weeks, and each of them moved the curve. At 70 tok/s/user P90 interactivity, the gain is larger still: from 4.4k to 71.8k tokens/s per GPU.
+Our first full DeepSeek-V4-Pro (1.6T, FP4) AgentX run on AMD Instinct MI355X, on Aug 21, peaked at 22.9k tokens/s per GPU. The run on Oct 28, on the same hardware, peaked at 79.8k. There were six public submissions in that window, and from mid-September on we submitted a new one every one to two weeks. At 70 tok/s/user P90 interactivity the difference is larger: 4.4k tokens/s per GPU in August, 71.8k now.
 
-That pace changed where MI355X sits against NVIDIA. On the public InferenceX dashboard, MI355X now produces more tokens per dollar than B200 and B300 at every interactivity level both systems have published, up to 1.85× B200 and 2.26× B300, and its peak of 99.1M tokens per $1 TCO is 1.50× B200 and 1.20× B300 (Rent – 3-year commit tier, data retrieved 2026-10-30).
+On the public InferenceX dashboard, MI355X now gets more tokens per dollar than B200 and B300 at every interactivity level where both have published results. The lead goes up to 1.85× over B200 and 2.26× over B300. Peak tokens per $1 TCO is 99.1M, 1.50× B200 and 1.20× B300. These numbers use the Rent (3-year commit) cost tier, with data retrieved on 2026-10-30.
 
-Our [earlier article](https://www.amd.com/en/developer/resources/technical-articles/2026/mori-umbp-empowers-amd-instinct-gpus.html) covered the AgentX benchmark and MoRI UMBP, the KV cache layer under this work. This post is about the GPU, the kernels and scheduling changes we made on top of it, and how fast those changes added up.
+The AgentX benchmark and MoRI UMBP, the KV cache layer this work runs on, are described in our [earlier article](https://www.amd.com/en/developer/resources/technical-articles/2026/mori-umbp-empowers-amd-instinct-gpus.html). Here we focus on the GPU itself, the kernel and scheduling work we did on top of it, and how those changes added up over ten weeks.
 
 ![Figure 1](figures/mi355x-progress-aug-oct.png)
 
@@ -14,9 +14,9 @@ Our [earlier article](https://www.amd.com/en/developer/resources/technical-artic
 
 ## Six submissions in ten weeks
 
-Table 1 lists every MoRI-SGLang submission between Aug 21 and Oct 28. Each row is a public InferenceX CI run on the same MI355X cluster. Only the software and the deployment recipe changed.
+Table 1 has every MoRI-SGLang submission from Aug 21 to Oct 28. Each one is a public InferenceX CI run on the same MI355X cluster; between runs we changed only software and the deployment recipe.
 
-*Table 1: MI355X MoRI-SGLang AgentX submissions. Throughput is per GPU; "at 70 tok/s/user" is read off that run's frontier with the dashboard's interpolation. The last column is the same 16 GPUs at concurrency 192.*
+*Table 1: MI355X MoRI-SGLang AgentX submissions. Throughput is per GPU. "At 70 tok/s/user" is read off each run's frontier with the dashboard's interpolation. The last column is the same 16 GPUs at concurrency 192.*
 
 | Run | What landed | Peak tok/s/GPU | At 70 tok/s/user | Concurrency 192 |
 |---|---|---|---|---|
@@ -31,11 +31,11 @@ Table 1 lists every MoRI-SGLang submission between Aug 21 and Oct 28. Each row i
 
 *Figure 2: Peak throughput per GPU and throughput at 70 tok/s/user for each submission in Table 1.*
 
-Two things stand out. First, no single change accounts for the gain. The biggest steps were Sep 17 (2.1× peak) and Oct 4 (1.4× peak), but every run raised throughput at 70 tok/s/user, and after Sep 17 each one added another 9–39%. Second, the later runs mostly traded raw peak for speed per user. Between Oct 4 and Oct 28, concurrency 192 throughput went up only 5%, but its P90 interactivity went from 69.3 to 85.1 tok/s/user. The Oct 28 peak is lower than Oct 21 for the same reason (more on that below).
+The largest jumps in peak throughput came on Sep 17 (2.1×) and Oct 4 (1.4×), but throughput at 70 tok/s/user went up in every run, by 9–39% per run after Sep 17. The later runs did more for per-user speed than for peak: from Oct 4 to Oct 28, throughput at concurrency 192 rose 5% while its P90 interactivity went from 69.3 to 85.1 tok/s/user. That is also why the Oct 28 peak is below Oct 21's, as explained further down.
 
-One caveat on the Sep 17 jump: that run also moved to the DeepSeek-V4-Pro-0813 checkpoint, whose bundled draft head is accepted more often (golden acceptance length 3.01, up from 2.49). In our measurements that is worth about 8% of throughput at concurrency 192. The rest of the step is our software.
+Part of the Sep 17 gain is not ours. That run also switched to the DeepSeek-V4-Pro-0813 checkpoint, whose bundled draft head has a higher acceptance rate (golden acceptance length 3.01 instead of 2.49). We measured that at about 8% of throughput at concurrency 192.
 
-## What MI355X brings to DeepSeek-V4-Pro
+## MI355X hardware
 
 *Table 2: Per-GPU specifications from the InferenceX GPU specs page, and the Rent – 3-year commit price used for TCO.*
 
@@ -46,13 +46,13 @@ One caveat on the Sep 17 jump: that run also moved to the DeepSeek-V4-Pro-0813 c
 | Dense FP4 | 10.1 PFLOPS | 9.0 PFLOPS | 13.5 PFLOPS |
 | Rent, $/GPU-hour | $2.90 | $3.70 | $4.25 |
 
-Memory capacity shaped most of the deployment choices in this work. DeepSeek-V4-Pro in FP4 fits on four MI355X GPUs with room left for KV cache, so our recipe runs TP4 prefill at concurrency 16–48 and TP4 + TP4 at concurrency 1, instead of using eight GPUs per role. Every published B200 AgentX recipe for this model uses eight GPUs per role. The large HBM also keeps about 94% of prompt tokens in GPU memory at concurrency 192–512, so MoRI UMBP only needs to serve the remainder from DRAM.
+Memory capacity drove most of our deployment choices. DeepSeek-V4-Pro in FP4 fits on four MI355X GPUs with space left for KV cache, so the recipe uses TP4 prefill at concurrency 16–48 and TP4 + TP4 at concurrency 1. Every published B200 AgentX recipe for this model uses eight GPUs per role. At concurrency 192–512, about 94% of prompt tokens are served from GPU memory, and MoRI UMBP covers the rest from DRAM.
 
-The other point is compute. B300 has about a third more dense FP4 than MI355X. Yet at 70 tok/s/user MI355X produces slightly more tokens per GPU than B300 (71.8k vs. 68.8k) and 1.45× B200 (49.5k). Most of the kernel work below was about getting closer to the hardware's limits on this model.
+B300 has about a third more dense FP4 compute than MI355X. At 70 tok/s/user, though, MI355X runs at 71.8k tok/s per GPU, a bit more than B300's 68.8k and 1.45× B200's 49.5k. Much of the kernel work described below went into closing the distance between what the hardware can do and what this model was getting from it.
 
-## Against NVIDIA at the same interactivity
+## Comparison with NVIDIA
 
-Comparing peaks hides where on the latency curve each system gets its number, so Table 3 reads each system's frontier at fixed interactivity levels, using the dashboard's interpolation and no extrapolation.
+A peak number does not say where on the latency curve it was reached, so Table 3 compares systems at fixed interactivity levels. We used the dashboard's interpolation and did not extrapolate.
 
 *Table 3: Total tokens per $1 TCO in millions (Rent tier). "—" means the system has no published point at that interactivity. In parentheses: MI355X divided by that system. For NVIDIA we take the best point across all published frameworks.*
 
@@ -69,35 +69,43 @@ Comparing peaks hides where on the latency curve each system gets its number, so
 
 *Figure 3: MI355X tokens per dollar divided by each NVIDIA system's tokens per dollar at the same P90 interactivity (Rent tier). Above the red line MI355X is cheaper per token.*
 
-Against B200 and B300, the other 8-GPU servers, MI355X is ahead at every level. Per GPU, it is never more than 12% behind either system in throughput, and it is ahead of both at 70 and 150 tok/s/user; the lower price turns that into a tokens-per-dollar lead of 1.12–1.85× over B200 and 1.29–2.26× over B300. On the Owning cost tier the lead holds: 1.67× B200 and 1.57× B300 at 70 tok/s/user.
+B200 and B300 are also 8-GPU servers, and MI355X is ahead of both at every level in the table: 1.12–1.85× B200 and 1.29–2.26× B300 on tokens per dollar. In raw throughput per GPU, MI355X is at most 12% behind either one anywhere in this range, and ahead of both at 70 and 150 tok/s/user. The rest of the tokens-per-dollar lead comes from the lower price. On the Owning cost tier, MI355X still gets 1.67× the tokens per dollar of B200 and 1.57× of B300 at 70 tok/s/user.
 
-GB200 NVL72 and GB300 NVL72 are 72-GPU NVLink racks. MI355X's peak is slightly above GB200's (99.1M vs. 95.0M) and ahead at 120–150 tok/s/user, while GB200 leads around 100 tok/s/user. GB300 NVL72 is ahead at every level; we are closest at the high-throughput end, at 0.95× its tokens per dollar at 65 tok/s/user.
+GB200 NVL72 and GB300 NVL72 are 72-GPU NVLink racks. Against GB200, MI355X has a slightly higher peak (99.1M vs. 95.0M) and is ahead at 120–150 tok/s/user, while GB200 is ahead around 100 tok/s/user. GB300 is ahead at every level. The closest we get is 0.95× of its tokens per dollar, at 65 tok/s/user.
 
 ![Figure 4](figures/tco-frontier-vs-nvidia.png)
 
 *Figure 4: Total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). Table 3 uses each NVIDIA system's best framework, so its B300 and GB300 peaks are higher than the curves shown here.*
 
-## The optimizations, run by run
+## What changed in each run
 
-Everything below is in the public SGLang ROCm images (`lmsysorg/sglang-rocm`) and the [InferenceX recipes](https://github.com/SemiAnalysisAI/InferenceX).
+All of the changes below are in the public SGLang ROCm images (`lmsysorg/sglang-rocm`) and the [InferenceX recipes](https://github.com/SemiAnalysisAI/InferenceX).
 
-**Sep 17: making the model cheap to attend over.** DeepSeek-V4's DSA indexer scores the full context for every query token at every layer and keeps its own per-token KV. We moved it onto AITER FP4 kernels for gfx950, which cuts that KV from 132 B to 68 B per token. That means more sequences in HBM, less indexer bandwidth per decode step, and fewer bytes for MoRI to move between prefill and decode. The same run switched speculative decoding from EAGLE to DSpark, which emits a block of draft tokens in one pass, and scaled admission limits and CUDA-graph ranges with concurrency instead of using one setting for all points. The MoRI UMBP linker took over the KV tier at concurrency 128–256.
+### Sep 17
 
-**Sep 25: fewer GPUs per replica, less queueing.** With MoRI UMBP serving every point, prefill no longer needed TP8 just to hold KV, so concurrency 16–48 moved to TP4 prefill + TP8 decode on 12 GPUs, with 26–34% more throughput per GPU. In PD disaggregation a request normally waits for decode to bootstrap it before prefill starts; letting prefill start optimistically, with the speculative KV owned by the request, cut P90 TTFT by 27.7% at concurrency 256. Removing a host sync from DSpark prefill slot expansion cut another 13–16% at concurrency 128–256. We also found decode was silently inheriting the prefill router's consistent-hashing policy and switched it to round-robin.
+DeepSeek-V4's DSA indexer scores the whole context for every query token at every layer, and it keeps its own KV for each token. We moved the indexer onto AITER FP4 kernels for gfx950, which takes that KV from 132 B to 68 B per token. More sequences fit in HBM, each decode step reads less indexer data, and MoRI has fewer bytes to send from prefill to decode. In the same run we replaced EAGLE with DSpark for speculative decoding (DSpark drafts a block of tokens in one pass), and made admission limits and CUDA-graph ranges scale with concurrency rather than sharing one setting. The MoRI UMBP linker took over KV storage at concurrency 128–256.
 
-**Oct 4: MoE and KV precision at high concurrency.** Prefill at concurrency 192–512 now runs AITER's MegaMoEv2 kernel ([sglang#35619](https://github.com/sgl-project/sglang/pull/35619)), written in FlyDSL, which fuses dispatch, expert GEMM and combine and runs 8-way expert parallelism over the MoRI symmetric heap. The KV pool was split into an FP8 NoPE part and a BF16 RoPE part. Together these added 11% throughput per GPU at concurrency 256 and opened up concurrency 384 and 512, which is where the 77.3k peak comes from. MLA decode now picks its split-K factor per index stream, since layers in this model have KV lengths that differ by orders of magnitude.
+### Sep 25
 
-**Oct 21: the low- and high-concurrency ends.** FP8 KV extended down to concurrency 1–48, where agent sessions are longest and HBM fills first. Decode at concurrency 192–512 moved to power-of-two-choices routing, which evens out load across decode DP ranks, and MegaMoE prefill at concurrency 512 turned on expert-parallel load balancing so the hottest experts no longer set the step time. A new concurrency-1 point with eight request slots raised single-user speed to 221 tok/s/user.
+Once MoRI UMBP served every point, prefill no longer needed TP8 just to have room for KV. Concurrency 16–48 moved to TP4 prefill with TP8 decode, 12 GPUs instead of 16, and throughput per GPU rose 26–34%. We also changed how prefill starts. In PD disaggregation a request usually waits for decode to bootstrap it, and at high concurrency that wait is pure queueing. With optimistic prefill, where the request owns its speculative KV, P90 TTFT at concurrency 256 dropped 27.7%. Removing a host sync from DSpark prefill slot expansion took off another 13–16% at concurrency 128–256. We also found that decode had been inheriting the prefill side's consistent-hashing policy, and switched decode to round-robin.
 
-**Oct 28: ROCm 10.** Moving the image to ROCm 10 (`v0.5.22-rocm10-mi35x-20261026`) raised P90 interactivity at every high-concurrency point. At concurrency 512 it went from 51.8 to 60.6 tok/s/user, while throughput per GPU dropped from 83.7k to 79.8k. Over the interactivity range both runs cover, the Oct 28 curve is above Oct 21 at every point.
+### Oct 4
 
-Underneath all of this, MoRI carries both the PD KV transfer and the MoE all-to-all over standard RoCE between 8-GPU nodes, and MoRI UMBP with the SGLang KVCache Store Linker provides a shared, deduplicated DRAM KV pool. Both are covered in detail in the [earlier article](https://www.amd.com/en/developer/resources/technical-articles/2026/mori-umbp-empowers-amd-instinct-gpus.html).
+At concurrency 192–512, prefill now uses AITER's MegaMoEv2 kernel ([sglang#35619](https://github.com/sgl-project/sglang/pull/35619)). It is written in FlyDSL, fuses dispatch, expert GEMM and combine into one kernel, and runs 8-way expert parallelism over the MoRI symmetric heap. We also split the KV pool into an FP8 NoPE part and a BF16 RoPE part. With both changes, throughput per GPU at concurrency 256 rose 11%, and concurrency 384 and 512 became usable; the 77.3k peak is at 512. MLA decode now chooses its split-K factor per index stream, since KV lengths in this model vary by orders of magnitude from layer to layer.
 
-## Summary
+### Oct 21
 
-In ten weeks and six public submissions, DeepSeek-V4-Pro on MI355X went from 22.9k to 79.8k peak tokens/s per GPU and from 4.4k to 71.8k at 70 tok/s/user, on unchanged hardware. MI355X now leads B200 and B300 on tokens per dollar at every interactivity level they share, by up to 1.85× and 2.26×, with peak tokens per dollar 1.50× B200 and 1.20× B300. GB300 NVL72 is still ahead, and the gap is what we are working on next.
+FP8 KV was extended to concurrency 1–48. Those points have the longest agent sessions, and HBM fills there first. Decode at concurrency 192–512 switched to power-of-two-choices routing so load is spread more evenly across decode DP ranks. MegaMoE prefill at concurrency 512 got expert-parallel load balancing, so the busiest experts stop setting the step time. We also added a concurrency-1 point with eight request slots, which reached 221 tok/s/user.
 
-The 288 GB of HBM per GPU let us run the model on fewer GPUs per role, and AITER, SGLang, MoRI and ROCm releases turned that headroom into throughput. All of it is upstream or in public images, and every run is in the public InferenceX CI.
+### Oct 28
+
+The image moved to ROCm 10 (`v0.5.22-rocm10-mi35x-20261026`). P90 interactivity went up at all the high-concurrency points; at concurrency 512 it went from 51.8 to 60.6 tok/s/user, and throughput per GPU went down from 83.7k to 79.8k. Where the Oct 21 and Oct 28 runs cover the same interactivity, the Oct 28 curve is higher at every point.
+
+All of these runs use MoRI for the PD KV transfer and the MoE all-to-all, over standard RoCE between 8-GPU nodes, and MoRI UMBP with the SGLang KVCache Store Linker as a shared, deduplicated DRAM KV pool. The [earlier article](https://www.amd.com/en/developer/resources/technical-articles/2026/mori-umbp-empowers-amd-instinct-gpus.html) goes through both in detail.
+
+## Next steps
+
+GB300 NVL72 is the system we still trail on this benchmark, and that is where the next round of work is aimed. Every change in this post is upstream or in a public image, and every run can be checked in the public InferenceX CI.
 
 ## Acknowledgements
 
