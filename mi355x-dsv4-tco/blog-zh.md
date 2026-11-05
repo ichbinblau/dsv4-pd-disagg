@@ -1,4 +1,4 @@
-# AMD Instinct™ MI355X 上的 DeepSeek-V4-Pro：AgentX 结果与背后的工作
+# 重新定义智能体推理的性价比：AMD Instinct™ MI355X 运行 DeepSeek-V4-Pro，每美元 token 产出最高达 B200 的 1.85 倍
 
 *2026 年 10 月*
 
@@ -10,7 +10,7 @@
 
 ![图 1](figures/tco-frontier-vs-nvidia.png)
 
-*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位。每条曲线是一个系统的 Pareto 前沿；NVIDIA 各系统取所有已公开框架（SGLang、vLLM、Dynamo-SGLang、Dynamo-vLLM、Dynamo-TRT）里的最好点。红色是 MI355X + MoRI-SGLang + MoRI UMBP。数据来自 [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4)，获取于 2026-10-30。*
+*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位。[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。数据点标签是并行布局。表 1 对每个 NVIDIA 系统取所有已公开框架里的最好点，所以表中 B300 和 GB300 的峰值（分别来自 B300 SGLang 和 GB300 Dynamo vLLM）比图中曲线更高。*
 
 ## 关于这个基准
 
@@ -49,11 +49,11 @@ GB300 NVL72 在所有交互速度下都领先，MI355X 的每美元 token 数是
 
 ![图 3](figures/mi355x-progress-aug-oct.png)
 
-*图 3：MI355X MoRI-SGLang AgentX 配方的单卡吞吐 vs. P90 交互速度：[8 月 21 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4)、[9 月 25 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1)、[10 月 4 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37181045340/attempts/1)、[10 月 28 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40473082761/attempts/4)。*
+*图 3：MI355X MoRI-SGLang AgentX 配方的单卡吞吐 vs. P90 交互速度，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图，包含以下几次运行：[8 月 21 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4)、[9 月 25 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1)、[10 月 4 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37181045340/attempts/1)、[10 月 28 日](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40473082761/attempts/4)。*
 
 单卡吞吐峰值从 22.9k 升到 79.8k tok/s（3.5 倍），每美元 token 数峰值从 2850 万升到 9910 万。交互速度越高，变化越大：8 月时这套配方只有在很低并发下才能达到 70 tok/s/用户，单卡吞吐 4.4k；现在同样的交互速度下是 71.8k。
 
-图 4 单看一个点：16 张卡、并发 192。单卡吞吐提升 2.3 倍，P90 TTFT 从 33.6 s 降到 12.3 s，P90 交互速度从 23.5 升到 85.1 tok/s/用户。
+图 4 单看一个点：16 张卡、并发 192。单卡吞吐提升 2.3 倍；P90 TTFT 从 33.6 s 降到 12.3 s，首 token 快了 2.7 倍；P90 交互速度从 23.5 升到 85.1 tok/s/用户，提升 3.6 倍。
 
 ![图 4](figures/mi355x-c192-aug-vs-oct.png)
 
@@ -108,5 +108,3 @@ MoRI UMBP 和 KVCache Store Linker 已经合入 SGLang 上游，AITER kernel 随
 3. AMD，*Rebuilding Agentic AI from First Principles for AMD GPU*，与 Moonshot AI 联合发布。https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html
 4. MoRI UMBP 在 DeepSeek-V4 PD 分离上的实践（前一篇文章）。https://github.com/ichbinblau/dsv4-pd-disagg/tree/main/dsv4-umbp
 5. 本基准的 InferenceX 配方演进：PR [#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823)、[#3188](https://github.com/SemiAnalysisAI/InferenceX/pull/3188)、[#3256](https://github.com/SemiAnalysisAI/InferenceX/pull/3256)、[#3664](https://github.com/SemiAnalysisAI/InferenceX/pull/3664)、[#4186](https://github.com/SemiAnalysisAI/InferenceX/pull/4186)、[#4571](https://github.com/SemiAnalysisAI/InferenceX/pull/4571)。
-
-*方法说明：数字取自 InferenceX 公开 API（`/api/v1/benchmarks?model=DeepSeek-V4-Pro`），获取于 2026-10-30。数据快照和生成全部图表、表格的脚本在 `data/` 和 `make_figures.py`。相同交互速度下的数值用 InferenceX 的 `iso_interactivity.py` 计算，它移植自 dashboard 的插值算法。*

@@ -1,4 +1,4 @@
-# DeepSeek-V4-Pro on AMD Instinct™ MI355X: AgentX Results and the Work Behind Them
+# Redefining the Economics of Agentic Inference: DeepSeek-V4-Pro on AMD Instinct™ MI355X Delivers Up to 1.85× the Tokens per Dollar of B200
 
 *October 2026*
 
@@ -10,7 +10,7 @@ The other thing we want to show is how much of this came from software in a shor
 
 ![Figure 1](figures/tco-frontier-vs-nvidia.png)
 
-*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier. Each curve is one system's Pareto frontier. For NVIDIA systems we took the best point across every published framework (SGLang, vLLM, Dynamo-SGLang, Dynamo-vLLM, Dynamo-TRT). Red is MI355X with MoRI-SGLang and MoRI UMBP. Data from the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4), retrieved 2026-10-30.*
+*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier. Screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). Point labels give the parallelism layout. Table 1 takes each NVIDIA system's best point across all published frameworks, so its B300 and GB300 peaks (B300 SGLang, GB300 Dynamo vLLM) are higher than the curves shown here.*
 
 ## About the benchmark
 
@@ -49,11 +49,11 @@ Figure 3 shows each major submission of the MoRI-SGLang recipe on MI355X between
 
 ![Figure 3](figures/mi355x-progress-aug-oct.png)
 
-*Figure 3: Throughput per GPU vs. P90 interactivity for the MI355X MoRI-SGLang AgentX recipe on [Aug 21](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4), [Sep 25](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1), [Oct 4](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37181045340/attempts/1) and [Oct 28](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40473082761/attempts/4).*
+*Figure 3: Throughput per GPU vs. P90 interactivity for the MI355X MoRI-SGLang AgentX recipe, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) showing the runs on [Aug 21](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/32269076444/attempts/4), [Sep 25](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/35879254139/attempts/1), [Oct 4](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/37181045340/attempts/1) and [Oct 28](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/40473082761/attempts/4).*
 
 Peak throughput per GPU went from 22.9k to 79.8k tok/s (3.5×), and peak tokens per dollar from 28.5M to 99.1M. The change is larger at higher interactivity. In August the recipe only reached 70 tok/s/user at very low concurrency, where it produced 4.4k tok/s per GPU. It now produces 71.8k at that interactivity.
 
-Figure 4 looks at a single point, concurrency 192 on 16 GPUs. Throughput per GPU went up 2.3×, P90 TTFT went from 33.6 s to 12.3 s, and P90 interactivity went from 23.5 to 85.1 tok/s/user.
+Figure 4 looks at a single point, concurrency 192 on 16 GPUs. Throughput per GPU went up 2.3×, P90 TTFT dropped 2.7× (33.6 s to 12.3 s), and P90 interactivity went up 3.6× (23.5 to 85.1 tok/s/user).
 
 ![Figure 4](figures/mi355x-c192-aug-vs-oct.png)
 
@@ -108,5 +108,3 @@ Thanks to the SGLang community for design reviews and quick upstreaming, to Semi
 3. AMD, *Rebuilding Agentic AI from First Principles for AMD GPU*, with Moonshot AI. https://www.amd.com/en/developer/resources/technical-articles/2026/rebuilding-agentic-ai-for-amd-gpu.html
 4. MoRI UMBP on DeepSeek-V4 PD disaggregation (earlier post). https://github.com/ichbinblau/dsv4-pd-disagg/tree/main/dsv4-umbp
 5. InferenceX recipe history for this benchmark: PRs [#2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823), [#3188](https://github.com/SemiAnalysisAI/InferenceX/pull/3188), [#3256](https://github.com/SemiAnalysisAI/InferenceX/pull/3256), [#3664](https://github.com/SemiAnalysisAI/InferenceX/pull/3664), [#4186](https://github.com/SemiAnalysisAI/InferenceX/pull/4186), [#4571](https://github.com/SemiAnalysisAI/InferenceX/pull/4571).
-
-*Methodology: numbers come from the InferenceX public API (`/api/v1/benchmarks?model=DeepSeek-V4-Pro`), retrieved 2026-10-30. The snapshots and the script that generates every figure and table are in `data/` and `make_figures.py`. Same-interactivity values use InferenceX's `iso_interactivity.py`, which ports the dashboard's interpolation.*
