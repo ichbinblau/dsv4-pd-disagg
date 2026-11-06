@@ -1,28 +1,28 @@
-# Serving Kimi-K3 2.8T on One AMD Instinct™ MI355X Node: AgentX Results
+# 4.6× in Eleven Weeks: AMD Instinct™ MI355X Leads B200, B300 and GB200 on Kimi-K3 Agentic Inference Cost
 
-*October 2026*
+*November 2026*
 
-The first question with Kimi-K3 is where to put it. The MXFP4 weights are about 1.56 TB. MI355X has 288 GB of HBM3E per GPU, so with TP8 each GPU holds about 195 GB and the whole model fits on a single 8-GPU node. An 8× B200 node does not have enough memory, and the published B200 and GB200 configurations run the model across two nodes with pipeline parallelism.
+On SemiAnalysis's public InferenceX dashboard for Kimi-K3 (2.8T, FP4) agentic inference, a single 8-GPU AMD Instinct MI355X node now gets more tokens per dollar than B200, B300 and GB200 NVL72 at every interactivity level where they have published results: 2.0–2.6× B200, 2.0–3.0× B300 and 1.3–2.1× GB200 NVL72. Its peak of 21.7M tokens per $1 TCO is the highest on the Kimi-K3 dashboard, 2.09× B200 and 1.14× GB300 NVL72.
 
-On SemiAnalysis's public AgentX benchmark, that single MI355X node reaches a peak of 21.7M total tokens per $1 TCO on the Rent (3-year commit) tier, retrieved 2026-10-30. That is the highest peak on the Kimi-K3 dashboard. The best published peaks for NVIDIA systems are 10.4M for B200, 10.6M for B300, 9.9M for GB200 NVL72 and 19.1M for GB300 NVL72. Compared at the same interactivity, MI355X gets 2.0–2.6× the tokens per dollar of B200 between 25 and 100 tok/s/user.
+We got here in eleven weeks, from Aug 12 to Oct 27, with software work on the same hardware; over that time the best peak throughput per GPU on MI355X went from 3.8k to 17.5k tokens/s.
 
-Our first MI355X Kimi-K3 submission was on Aug 12, two weeks after the first NVIDIA result, and it peaked at 3.8k tokens/s per GPU. The current peak is 17.5k.
+This post covers why the whole model fits on one MI355X node, how that node compares with NVIDIA's systems, and the kernel and serving work in vLLM and ATOM behind the numbers.
 
 ![Figure 1](figures/tco-frontier-vs-nvidia.png)
 
-*Figure 1: Kimi-K3 FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier. Each curve is one system's Pareto frontier, using the best point across all published frameworks. Red is one 8× MI355X node running vLLM or ATOM. Data from the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3), retrieved 2026-10-30.*
+*Figure 1: Kimi-K3 FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, drawn in the dashboard's style from the InferenceX public API (retrieved 2026-10-30). Each curve is one system's best published framework; MI355X is one 8-GPU node running vLLM or ATOM. Dashed circles mark points with KV offload on.*
 
-## The model and the benchmark
+## AgentX and Kimi-K3 in brief
 
-Kimi-K3 is a 2.8T-parameter MoE with 896 experts and 1M-token native context. Its attention stack mixes two layer types: Kimi Delta Attention (KDA) layers, which keep a recurrent state per request, and MLA layers, which keep a paged KV cache. It comes with a DSpark draft head (Inferact/Kimi-K3-DSpark) for speculative decoding.
+AgentX is a SemiAnalysis benchmark built from real agentic coding sessions and run through the public InferenceX CI. It replays whole sessions: each turn adds tool output to the context and sends everything back to the model. A session runs about 43 turns, the median turn has 142K input tokens and 444 output tokens, and over 96% of prompt tokens repeat a prefix the server has already processed.
 
-The mixed attention is what makes agentic serving harder here than for a pure-MLA model. When a session returns for its next turn, the server has to restore the paged KV and the KDA state, or recompute the prefix. In AgentX that is nearly every request. The benchmark replays real agentic coding sessions of about 43 turns; the median turn has 142K input tokens and 444 output tokens, and over 96% of prompt tokens repeat a prefix the server has seen before.
+Kimi-K3 is a 2.8T-parameter MoE with 896 experts and a 1M-token native context. Its attention mixes two kinds of layers: Kimi Delta Attention (KDA) layers keep a recurrent state for each request, and MLA layers keep a paged KV cache. It ships with a DSpark draft head (Inferact/Kimi-K3-DSpark) for speculative decoding. The mix makes agentic serving harder than for a pure-MLA model. When a session comes back for its next turn, the server has to restore both the paged KV and the KDA state, or recompute the prefix, and on AgentX that happens on almost every request.
 
-P90 interactivity is 1 divided by the P90 inter-token latency over the full response, in tok/s/user. Tokens per $1 TCO is total throughput per GPU, including cached tokens, divided by the hourly GPU cost from the SemiAnalysis AI Cloud TCO Model: on the Rent tier $2.90 for MI355X, $3.70 for B200, $4.25 for B300, $4.00 for GB200 and $5.00 for GB300; on the Owning tier $1.50, $1.73, $2.26, $1.86 and $2.31.
+## Comparison with NVIDIA
 
-## Cost and throughput
+Table 1 compares systems at fixed interactivity levels. Each system was measured at only a handful of concurrency settings, so its results rarely land exactly on a level such as 40 tok/s/user. We take the value from the curve between the two nearest measured points, the same way the dashboard draws its lines. When a system has no measurements on both sides of a level, we leave the cell empty ("—") instead of guessing.
 
-*Table 1: Total tokens per $1 TCO in millions (Rent tier) at the same P90 interactivity, interpolated with the dashboard's own frontier spline and not extrapolated. "—" means the system has no published point there. The number in parentheses is MI355X divided by that system.*
+*Table 1: Total tokens per $1 TCO in millions (Rent tier). "—" means the system has no published point at that interactivity. In parentheses: MI355X divided by that system. For each system we take the best point across all published frameworks.*
 
 | P90 interactivity | MI355X | B200 | B300¹ | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|
@@ -37,45 +37,79 @@ P90 interactivity is 1 divided by the P90 inter-token latency over the full resp
 
 ![Figure 2](figures/iso-interactivity-ratio.png)
 
-*Figure 2: MI355X tokens per dollar divided by each NVIDIA system's tokens per dollar at the same P90 interactivity (Rent tier). Bars above 1.0 mean MI355X is cheaper per token.*
+*Figure 2: MI355X tokens per dollar divided by each NVIDIA system's tokens per dollar at the same P90 interactivity (Rent tier). Above the red line MI355X is cheaper per token.*
 
-Against B200, MI355X gets 2.0–2.6× the tokens per dollar across the whole range in the table. Most of that is throughput rather than price: MI355X produces 1.6–2.0× the tokens per second per GPU of B200 over the same range, for example 13.3k vs. 7.9k at 40 tok/s/user. We think the main reason is the memory layout. B200 has to split the model across two nodes with pipeline parallelism, while MI355X keeps all of it inside one node.
+MI355X is ahead of B200, B300 and GB200 NVL72 at every level in the table: 2.0–2.6× B200, 2.0–3.0× B300 and 1.3–2.1× GB200 on tokens per dollar. Most of the lead over B200 comes from throughput rather than price. Per GPU, MI355X produces 1.6–2.0× B200's throughput across this range, for example 13.3k vs. 7.9k tok/s at 40 tok/s/user, and 1.4–1.5× GB200's at 25–40 tok/s/user. On the Owning cost tier, MI355X still gets 1.8–2.3× the tokens per dollar of B200 and 1.2–1.9× of GB200.
 
-Against GB200 NVL72, MI355X gets 1.3–2.1× the tokens per dollar, and 1.4–1.5× the throughput per GPU at 25–40 tok/s/user. On the Owning tier the ratios are 1.8–2.3× for B200 and 1.2–1.9× for GB200.
+GB300 NVL72 is ahead from 40 tok/s/user up, with MI355X at 0.64–0.87× of its tokens per dollar. Those GB300 points come from wide-EP disaggregated deployments of 24 to 40 GPUs inside the NVLink rack. MI355X's peak of 21.7M is higher than GB300's 19.1M, and it is reached at 20.7 tok/s/user, below the lowest interactivity GB300 has published.
 
-GB300 NVL72 is ahead from 40 tok/s/user upward, where MI355X is at 0.64–0.87× of its tokens per dollar. Those GB300 points come from wide-EP disaggregated deployments of 24 to 40 GPUs inside the NVLink rack. MI355X does have the higher peak (21.7M vs. 19.1M), reached at 20.7 tok/s/user, which is below the lowest interactivity GB300 has published.
+## How the curve evolved in eleven weeks
 
-Running one replica per 8-GPU box also has practical benefits that do not show up in these numbers: simpler scheduling, no cross-node pipeline bubbles, and a smaller failure domain.
-
-## Eleven weeks of software
-
-AMD supports two serving stacks for Kimi-K3 on MI355X, vLLM and ATOM. Figure 3 shows both over time on the same 8 GPUs.
+Our first Kimi-K3 AgentX run on MI355X, with vLLM on Aug 12, came two weeks after the first NVIDIA result and peaked at 3.8k tokens/s per GPU. By Oct 27 vLLM peaked at 15.9k. ATOM started on Aug 21 at 4.6k and peaked at 17.5k on Oct 15. At 40 tok/s/user P90 interactivity, vLLM went from 2.1k to 13.1k tokens/s per GPU, and its single-user speed from 61 to 212 tok/s/user. Figure 3 shows how each stack's curve moved, and Figure 4 tracks all 18 submissions, 12 with vLLM and 6 with ATOM. Each one is a public InferenceX CI run on the same MI355X cluster, one 8-GPU node per server.
 
 ![Figure 3](figures/mi355x-progress-aug-oct.png)
 
-*Figure 3: Throughput per GPU vs. P90 interactivity for Kimi-K3 FP4 AgentX on MI355X by submission date. Left: vLLM. Right: ATOM.*
+*Figure 3: Throughput per GPU vs. P90 interactivity for Kimi-K3 FP4 AgentX on MI355X, four submissions for each of vLLM and ATOM. Point labels give the parallelism layout; dashed circles mark KV offload to the DRAM tier.*
 
-With vLLM, peak throughput per GPU went from 3.8k to 15.9k tok/s. At 40 tok/s/user it went from 2.1k to 13.1k, and at 60 tok/s/user from 1.1k to 8.8k. Single-user speed at concurrency 1 went from 61 to 212 tok/s/user. With ATOM, peak throughput went from 4.6k to 17.5k tok/s, and at 60 tok/s/user from 2.8k to 8.5k.
+![Figure 4](figures/submission-timeline.png)
 
-## What changed
+*Figure 4: Peak throughput per GPU of every MI355X Kimi-K3 submission, Aug 12 to Oct 27.*
 
-All of the following is in public images (`vllm/vllm-openai-rocm` nightlies and `rocm/atom-dev`) and in the [InferenceX recipes](https://github.com/SemiAnalysisAI/InferenceX).
+vLLM's biggest jump came in its first three weeks, when decode context parallelism and a DRAM KV tier made concurrency 44–52 usable and the peak went from 3.8k to 10.2k. After that, throughput at 40 tok/s/user rose by up to 19% per run. ATOM nearly doubled its peak in its second run, six days after the first, and gained another 19–21% in each of its last two runs.
 
-Kernels. The experts use AITER's MXFP4 MoE kernels (SITUV2, A4W4 and A8W4) with FlyDSL stage-2 FP8. Around them, a low-latency MoE router GEMM that handles any shape ([vllm#61895](https://github.com/vllm-project/vllm/pull/61895)), preshuffled FP4 GEMM configs, and latent-MoE up-projections that keep only the local rank's shards ([vllm#59591](https://github.com/vllm-project/vllm/pull/59591)) reduce the time and memory spent outside the expert GEMMs. KDA runs on AITER Gluon kernels for decode and speculative decode ([vllm#57392](https://github.com/vllm-project/vllm/pull/57392)) and for chunked prefill ([vllm#59552](https://github.com/vllm-project/vllm/pull/59552)), alongside a fused gfx950 chunk kernel. Moving the DSpark draft's attention from Triton MLA to AITER MLA ([vllm#55966](https://github.com/vllm-project/vllm/pull/55966)) raised P90 interactivity by 28.9% and throughput per GPU by 14.5% at concurrency 1.
+## MI355X hardware
 
-Single-user decode is mostly small kernels and collectives, so launch and sync overhead dominates. At concurrency 1, vLLM now runs each MoE decoder layer as one persistent FlyDSL kernel with the TP all-reduce done inside it ([vllm#60683](https://github.com/vllm-project/vllm/pull/60683)). Several FP8 fusions also landed: AttnRes output with per-token FP8 input quantization ([vllm#59069](https://github.com/vllm-project/vllm/pull/59069)), the GLA gate GEMM with MLA FP8 prefill q/k/v prep ([vllm#59634](https://github.com/vllm-project/vllm/pull/59634)), and FlyDSL FP8 prefill attention in ATOM. TP all-reduce uses AITER's INT4 QuickReduce for messages of 16 MB and up.
+*Table 2: Per-GPU specifications from the InferenceX GPU specs page, and the Rent – 3-year commit price used for TCO.*
 
-Long-context decode. At 100K+ tokens of context, decode is limited by KV bandwidth. Decode context parallelism shards the KV read across all 8 GPUs, using an all-to-all backend and an AITER ASM kernel for the multi-token verify step. The vLLM recipe now uses DCP8 at every concurrency, and ATOM uses it from concurrency 14 up. Both target and draft use an FP8 KV cache.
+| | MI355X | B200 | B300 | GB200 NVL72 | GB300 NVL72 |
+|---|---|---|---|---|---|
+| HBM capacity | 288 GB HBM3E | 180 GB | 268 GB | 186 GB | 278 GB |
+| HBM bandwidth | 8 TB/s | 8 TB/s | 8 TB/s | 8 TB/s | 8 TB/s |
+| Dense FP4 | 10.1 PFLOPS | 9.0 PFLOPS | 13.5 PFLOPS | 10.0 PFLOPS | 15.0 PFLOPS |
+| Rent, $/GPU-hour | $2.90 | $3.70 | $4.25 | $4.00 | $5.00 |
 
-KDA state and offload. Each request's KDA state is about 55 MiB. ATOM first offloaded it to CPU, then replaced that with ReplaySSM, which rebuilds the state in place from a checkpoint ring kept in GPU memory, so the whole CPU budget can go to paged KV. Storing the SSM state in FP16 instead of FP32 gave back up to 7.8% of the KV pool. For paged KV, both stacks keep a DRAM tier of about 225 GB per rank, through SimpleCPUOffloadConnector in vLLM and LMCache in ATOM, with each rank's pool pinned to its own socket.
+Memory capacity decides how this model can be deployed. Kimi-K3's MXFP4 weights are about 1.56 TB. With TP8 on MI355X that is about 195 GB per GPU, so the whole model fits on one 8-GPU node with room left for KV cache. Eight B200s have 1.44 TB and eight GB200s 1.49 TB, so the published B200 and GB200 configurations split the model across two nodes with pipeline parallelism.
 
-Speculative decoding and scheduling. DSpark uses 7 draft tokens at concurrency 1 and fewer as batches grow (5, 4, then 3), and ATOM now keeps the draft model on at concurrency 48–72. In one run we saw that the slowest 10% of decodes happened in the largest batches, so we lowered the running-sequence caps at concurrency 4–32, which raised P90 interactivity. ATOM added a batch-size-1 CUDA graph, since 92% of decode steps at concurrency 1 had been replaying the batch-size-2 graph, and both stacks size their graph capture to the DSpark verify batch.
+On compute, MI355X has a little more dense FP4 than B200 (10.1 vs. 9.0 PFLOPS), yet at 40 tok/s/user it produces 1.68× B200's throughput per GPU. Much of the kernel work described below went into that gap.
 
-## Summary
+## Key optimizations
 
-One 8× MI355X node serving Kimi-K3 2.8T peaks at 21.7M tokens per $1 TCO, the highest on the Kimi-K3 AgentX dashboard. At the same interactivity it gets 2.0–2.6× the tokens per dollar of B200 and 1.3–2.1× of GB200 NVL72. GB300 NVL72 is ahead from 40 tok/s/user upward. The 288 GB per GPU is what lets the whole model fit on one node, which B200 and GB200 cannot do. Since the first submission, peak throughput per GPU has gone from 3.8k to 17.5k tok/s, all from AITER, FlyDSL, vLLM and ATOM work that is upstream or in public images.
+All of the changes below are in public images (`vllm/vllm-openai-rocm` nightlies and `rocm/atom-dev`) and the [InferenceX recipes](https://github.com/SemiAnalysisAI/InferenceX). Table 3 lists the ones with the largest measured effect, roughly from biggest to smallest.
 
-Next, we want to bring MoRI UMBP, the shared and deduplicated DRAM KV pool we use for DeepSeek-V4-Pro, to Kimi-K3's mix of paged KV and KDA state, and to use MoRI-based PD disaggregation to close the gap with GB300 NVL72 at higher interactivity.
+*Table 3: Main optimizations and their measured effect. Throughput is per GPU; "at 40 tok/s/user" is read off each run's frontier.*
+
+| Optimization | Where | Measured effect | Landed |
+|---|---|---|---|
+| Decode context parallelism (DCP8), DRAM KV tier | vLLM, ATOM, AITER | vLLM: throughput at 40 tok/s/user 2.1k → 6.9k, peak 3.8k → 10.2k; ATOM: peak 4.6k → 9.0k | Aug 27–Sep 4 |
+| ReplaySSM, full CUDA graphs, FP16 SSM state | ATOM | Throughput at 40 tok/s/user 5.6k → 8.3k (+48%) | Sep 10, Sep 21 |
+| DSpark draft kept on at high concurrency, gated RMSNorm prefill | ATOM | Throughput at 40 tok/s/user +29%; peak 14.5k → 17.5k | Oct 15 |
+| AITER MLA for the DSpark draft | vLLM, AITER | +28.9% P90 interactivity and +14.5% throughput at concurrency 1 | Sep 17 |
+| FlyDSL FP8 prefill attention, prefill delayer | ATOM, FlyDSL | Throughput at 40 tok/s/user +24%; peak 12.2k → 14.5k | Sep 29 |
+| AITER Gluon KDA kernels, low-latency MoE router GEMM | vLLM, AITER | Throughput at 40 tok/s/user +19%; peak 14.9k → 16.0k | Oct 19 |
+| Persistent FlyDSL decode kernels at concurrency 1 | vLLM, FlyDSL | Single-user speed 178 → 211 tok/s/user (+19%) | Oct 26 |
+| Tail-aware admission caps | vLLM | Throughput at 40 tok/s/user +15%, at 60 tok/s/user +17% | Oct 27 |
+
+### Decode context parallelism and a DRAM KV tier
+
+At 100K+ tokens of context, decode is limited by KV bandwidth. Decode context parallelism shards the KV read across all eight GPUs, using an all-to-all backend and an AITER ASM kernel for the multi-token verify step. Paged KV that no longer fits in HBM goes to a DRAM tier of about 225 GB per rank, through SimpleCPUOffloadConnector in vLLM and LMCache in ATOM, with each rank's pool pinned to its own socket. Together these made concurrency 44–72 usable on a single node. The vLLM run that moved DCP8 to nearly every point raised throughput at 20 tok/s/user by 26%.
+
+### Kimi Delta Attention state
+
+Each request's KDA state is about 55 MiB. ATOM's first recipes offloaded it to CPU next to the paged KV. ReplaySSM replaced that: it rebuilds the state in place from a checkpoint ring kept in GPU memory, so the whole CPU budget can go to paged KV. The same change captured full CUDA graphs over the DSpark verify range and pinned the ranks to their sockets. Storing the SSM state in FP16 instead of FP32 then returned up to 7.8% of the KV pool, and a batch-size-1 CUDA graph stopped single-sequence decode steps from replaying the batch-size-2 graph, which had been 92% of steps at concurrency 1. Across these two changes, throughput at 40 tok/s/user went from 5.6k to 8.3k.
+
+### Speculative decoding
+
+Both stacks use the DSpark draft head, with the draft length set per concurrency: 7 tokens at concurrency 1, then fewer as batches grow. In vLLM, moving the draft's attention from Triton MLA to AITER MLA ([vllm#55966](https://github.com/vllm-project/vllm/pull/55966)) raised P90 interactivity by 28.9% and throughput by 14.5% at concurrency 1. ATOM now keeps a 4-token draft on at concurrency 48–72, where it previously ran without one, and added a gated RMSNorm pipeline for prefill ([ROCm/ATOM#2458](https://github.com/ROCm/ATOM/pull/2458)). That change raised ATOM's throughput at 40 tok/s/user by 29% and its peak from 14.5k to 17.5k.
+
+### AITER and FlyDSL kernels
+
+The experts run on AITER's MXFP4 MoE kernels (SITUV2, A4W4 and A8W4) with FlyDSL stage-2 FP8. Around them, vLLM gained a low-latency MoE router GEMM for any shape ([vllm#61895](https://github.com/vllm-project/vllm/pull/61895)), preshuffled FP4 GEMM configs, and latent-MoE up-projections that keep only the local rank's shards ([vllm#59591](https://github.com/vllm-project/vllm/pull/59591)). KDA runs on AITER Gluon kernels for decode and speculative decode ([vllm#57392](https://github.com/vllm-project/vllm/pull/57392)) and for chunked prefill ([vllm#59552](https://github.com/vllm-project/vllm/pull/59552)). The vLLM image that brought the Gluon KDA decode kernels and the router GEMM raised throughput at 40 tok/s/user by 19%.
+
+In ATOM, FlyDSL FP8 prefill attention, together with holding a ready prefill for four decode passes at concurrency 16 and up, raised throughput at 40 tok/s/user by 24%. For single-user decode, vLLM now runs each MoE decoder layer at concurrency 1 as one persistent FlyDSL kernel with the TP all-reduce inside it ([vllm#60683](https://github.com/vllm-project/vllm/pull/60683)), which took single-user speed from 178 to 211 tok/s/user.
+
+### Admission control
+
+In one vLLM run, the slowest 10% of decode steps all happened in the largest batches. Capping the number of running sequences at concurrency 4–32 below that point raised throughput at 40 tok/s/user by 15% and at 60 tok/s/user by 17%.
 
 ## Acknowledgements
 
@@ -85,7 +119,5 @@ Thanks to the vLLM and Moonshot AI communities, to Inferact for the DSpark draft
 
 1. SemiAnalysis InferenceX, Kimi-K3 dashboard. https://inferencex.semianalysis.com/inference/kimi-k3
 2. SemiAnalysis AI Cloud TCO Model (source of the $/GPU/hr rates). https://semianalysis.com/ai-cloud-tco-model/
-3. InferenceX recipe history for MI355X Kimi-K3: vLLM PRs [#2508](https://github.com/SemiAnalysisAI/InferenceX/pull/2508), [#2787](https://github.com/SemiAnalysisAI/InferenceX/pull/2787), [#3124](https://github.com/SemiAnalysisAI/InferenceX/pull/3124), [#3833](https://github.com/SemiAnalysisAI/InferenceX/pull/3833), [#3951](https://github.com/SemiAnalysisAI/InferenceX/pull/3951), [#4215](https://github.com/SemiAnalysisAI/InferenceX/pull/4215), [#4393](https://github.com/SemiAnalysisAI/InferenceX/pull/4393), [#4473](https://github.com/SemiAnalysisAI/InferenceX/pull/4473); ATOM PRs [#2670](https://github.com/SemiAnalysisAI/InferenceX/pull/2670), [#2716](https://github.com/SemiAnalysisAI/InferenceX/pull/2716), [#2852](https://github.com/SemiAnalysisAI/InferenceX/pull/2852), [#3207](https://github.com/SemiAnalysisAI/InferenceX/pull/3207), [#3407](https://github.com/SemiAnalysisAI/InferenceX/pull/3407), [#4085](https://github.com/SemiAnalysisAI/InferenceX/pull/4085).
-4. MoRI UMBP on DeepSeek-V4 PD disaggregation. https://github.com/ichbinblau/dsv4-pd-disagg/tree/main/dsv4-umbp
-
-*Methodology: numbers come from the InferenceX public API (`/api/v1/benchmarks?model=Kimi-K3`), retrieved 2026-10-30. The snapshots and the script that generates every figure and table are in `data/` and `make_figures.py`. Same-interactivity values use InferenceX's `iso_interactivity.py`, which ports the dashboard's interpolation.*
+3. AMD, *MoRI UMBP Empowers AMD Instinct™ MI355X GPU to Demonstrate Token-per-Dollar TCO Leadership on the Public AgentX Leaderboard* (more on the AgentX benchmark). https://www.amd.com/en/developer/resources/technical-articles/2026/mori-umbp-empowers-amd-instinct-gpus.html
+4. InferenceX recipe history for MI355X Kimi-K3: vLLM PRs [#2508](https://github.com/SemiAnalysisAI/InferenceX/pull/2508), [#2787](https://github.com/SemiAnalysisAI/InferenceX/pull/2787), [#2810](https://github.com/SemiAnalysisAI/InferenceX/pull/2810), [#3124](https://github.com/SemiAnalysisAI/InferenceX/pull/3124), [#3833](https://github.com/SemiAnalysisAI/InferenceX/pull/3833), [#3951](https://github.com/SemiAnalysisAI/InferenceX/pull/3951), [#4215](https://github.com/SemiAnalysisAI/InferenceX/pull/4215), [#4393](https://github.com/SemiAnalysisAI/InferenceX/pull/4393), [#4473](https://github.com/SemiAnalysisAI/InferenceX/pull/4473); ATOM PRs [#2670](https://github.com/SemiAnalysisAI/InferenceX/pull/2670), [#2716](https://github.com/SemiAnalysisAI/InferenceX/pull/2716), [#2852](https://github.com/SemiAnalysisAI/InferenceX/pull/2852), [#3207](https://github.com/SemiAnalysisAI/InferenceX/pull/3207), [#3407](https://github.com/SemiAnalysisAI/InferenceX/pull/3407), [#4085](https://github.com/SemiAnalysisAI/InferenceX/pull/4085).

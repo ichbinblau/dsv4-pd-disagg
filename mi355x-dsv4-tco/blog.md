@@ -76,7 +76,7 @@ B300 has about a third more dense FP4 compute than MI355X. At 70 tok/s/user, tho
 
 All of the changes below are in the public SGLang ROCm images (`lmsysorg/sglang-rocm`) and the [InferenceX recipes](https://github.com/SemiAnalysisAI/InferenceX). Table 3 lists the ones with the largest measured effect, roughly from biggest to smallest.
 
-*Table 3: Main optimizations and their measured effect. Throughput is per GPU. The concurrency-192 numbers come from the intermediate CI sweeps for [InferenceX PR #2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823), on the same 16 GPUs at each step; the others compare consecutive public runs. Some runs shipped several changes at once, and those rows give the gain of the bundle.*
+*Table 3: Main optimizations and their measured effect. Throughput is per GPU. The concurrency-192 numbers come from the intermediate CI sweeps for [InferenceX PR #2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823), on the same 16 GPUs at each step.*
 
 | Optimization | Where | Measured effect | Landed |
 |---|---|---|---|

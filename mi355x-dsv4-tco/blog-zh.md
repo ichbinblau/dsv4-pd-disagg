@@ -76,7 +76,7 @@ B300 的稠密 FP4 算力比 MI355X 高约三分之一。但在 70 tok/s/用户�
 
 以下改动都在公开的 SGLang ROCm 镜像（`lmsysorg/sglang-rocm`）和 [InferenceX 配方](https://github.com/SemiAnalysisAI/InferenceX)里。表 3 列出了实测效果最大的几项，大致按提升从大到小排列。
 
-*表 3：主要优化及实测效果，吞吐均为单卡。并发 192 的数字来自 [InferenceX PR #2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823) 的中间 CI 测试，每一步都是同样的 16 张卡；其余数字是相邻两次公开运行的对比。有些运行同时上线了好几项改动，这几行给出的是整组改动的提升。*
+*表 3：主要优化及实测效果，吞吐均为单卡。并发 192 的数字来自 [InferenceX PR #2823](https://github.com/SemiAnalysisAI/InferenceX/pull/2823) 的中间 CI 测试，每一步都是同样的 16 张卡。*
 
 | 优化 | 所在组件 | 实测效果 | 上线时间 |
 |---|---|---|---|
