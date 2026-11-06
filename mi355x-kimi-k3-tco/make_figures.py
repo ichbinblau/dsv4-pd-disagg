@@ -73,8 +73,12 @@ LATEST = load("kimik3_latest_20261030.json")
 
 
 def series(hw):
-    """Best of every published framework for each system, as the dashboard does."""
-    return points([r for r in LATEST if r["hardware"] == hw])
+    """Best of every published framework for each system, as the dashboard does.
+    For MI355X this post covers the vLLM results only (aggregated and disaggregated)."""
+    rows = [r for r in LATEST if r["hardware"] == hw]
+    if hw == "mi355x":
+        rows = [r for r in rows if r["framework"] != "atom"]
+    return points(rows)
 
 
 def stack(date, fw):
@@ -194,7 +198,7 @@ def fig_tco_frontier():
         ax.set_xlabel("P90 Interactivity (tok/s/user)", fontsize=12, color="#2b2b2b", labelpad=10)
         ax.set_ylabel(r"Total Tokens per \$1 TCO (tok/\$)", fontsize=12, color="#2b2b2b", labelpad=8)
         title(fig, r"Kimi K3 2.8T Agentic Total Tokens per \$1 TCO vs. P90 Interactivity",
-              "Rent – 3 Year Commit. Each curve is one system's best published framework.")
+              "Rent – 3 Year Commit. NVIDIA: best published framework per system. MI355X: vLLM.")
         legend_panel(fig, 0.785, 0.46, 0.198, 0.40, "Systems",
                      [(LABEL[hw], COLOR[hw]) for hw in ["gb300", "gb200", "b300", "b200", "mi355x"]])
         fig.text(0.065, 0.025, "Dashed circles mark points with KV offload on. "
@@ -237,10 +241,10 @@ def fig_iso_ratio(tiers):
                 color=COLOR["mi355x"], fontweight="bold")
         ax.set_xlim(-0.5, len(hws) - 0.5)
         ax.set_xticks([])
-        ax.set_ylim(0, 3.3)
+        ax.set_ylim(0, 3.1)
         ax.set_ylabel(r"MI355X tokens/\$ ÷ NVIDIA tokens/\$", fontsize=11, color="#2b2b2b")
-        title(fig, r"MI355X Tokens per \$1 TCO vs. NVIDIA at the Same P90 Interactivity",
-              "Kimi K3 2.8T, Agentic, Rent – 3 Year Commit. Above the red line MI355X is cheaper per token.",
+        title(fig, r"Kimi K3: MI355X vs. NVIDIA, Tokens per \$1 TCO at Matched Interactivity",
+              "Rent – 3 Year Commit. A bar above the dashed line means MI355X costs less per token.",
               y=0.92)
         fig.text(0.07, 0.035, "Small numbers under the bars are P90 interactivity in tok/s/user. "
                  "n/a = no published point at that interactivity (no extrapolation). "
@@ -249,109 +253,94 @@ def fig_iso_ratio(tiers):
         plt.close(fig)
 
 
-PROGRESS = {
-    "vllm": ["2026-08-12", "2026-09-17", "2026-10-15", "2026-10-27"],
-    "atom": ["2026-08-21", "2026-09-10", "2026-09-29", "2026-10-15"],
-}
+PROGRESS = ["2026-08-12", "2026-09-17", "2026-10-15", "2026-10-27"]
+
+
 def fig_progress():
-    """Figure 3: frontier of each MI355X stack at four of its submissions."""
+    """Figure 3: MI355X vLLM frontier at four of its submissions."""
     with plt.rc_context({"font.family": FONT}):
-        fig, axes = plt.subplots(1, 2, figsize=(14, 6.4), facecolor=BG, sharey=True)
-        fig.subplots_adjust(left=0.06, right=0.985, top=0.80, bottom=0.12, wspace=0.06)
+        fig, ax = plt.subplots(figsize=(12, 6.6), facecolor=BG)
+        fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.11)
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
-        for ax, fw, name in [(axes[0], "vllm", "vLLM"), (axes[1], "atom", "ATOM")]:
-            dash_axes(ax, xgrid=True)
-            ax.set_xlim(0, 230)
-            ax.set_ylim(0, 19500)
-            taken = []
-            curves = []
-            for date, color in zip(PROGRESS[fw], REDS):
-                f = frontier(stack(date, fw))
-                for p in f:
-                    p["y"] = p["throughput"]
-                draw_curve(ax, f, color, lw=2.3 if color == REDS[-1] else 1.8)
-                curves.append((date, color, f))
-                for p in f:
-                    cx, cy = ax.transData.transform((p["interactivity"], p["y"]))
-                    r = 8 * fig.dpi / 72
-                    taken.append(Bbox.from_extents(cx - r, cy - r, cx + r, cy + r))
-            handles = [Line2D([], [], marker="o", ls="-", lw=2, ms=7, color=color, label=date)
-                       for date, color, _ in curves]
-            leg = ax.legend(handles=handles, loc="upper right", fontsize=10.5, frameon=True,
-                            facecolor=BG, edgecolor="#c4c7cc", framealpha=1, borderpad=0.8,
-                            labelspacing=0.6, handlelength=1.6)
-            leg.get_frame().set_boxstyle("round,pad=0.2,rounding_size=0.8")
-            fig.canvas.draw()
-            taken.append(leg.get_window_extent(renderer).expanded(1.03, 1.05))
-            inside = ax.get_window_extent(renderer)
-            for date, color, f in reversed(curves):
-                for p in f:
-                    for dx, dy, ha, va in [(0, 9, "center", "bottom"), (0, -10, "center", "top"),
-                                           (10, 3, "left", "bottom"), (-10, 3, "right", "bottom")]:
-                        t = ax.annotate(parallelism_label(p["row"]), (p["interactivity"], p["y"]),
-                                        textcoords="offset points", xytext=(dx, dy), ha=ha, va=va,
-                                        fontsize=7.5, fontweight="bold", color=INK, zorder=6)
-                        bb = t.get_window_extent(renderer).expanded(1.06, 1.25)
-                        if (bb.x0 >= inside.x0 and bb.x1 <= inside.x1 and bb.y0 >= inside.y0
-                                and bb.y1 <= inside.y1 and not any(bb.overlaps(o) for o in taken)):
-                            taken.append(bb)
-                            break
-                        t.remove()
-            ax.set_title(f"MI355X ({name})", fontsize=12.5, fontweight="bold", color=INK, loc="left")
-            ax.set_xlabel("P90 Interactivity (tok/s/user)", fontsize=11.5, color="#2b2b2b")
-        axes[0].set_ylabel("Token Throughput per Chip (tok/s/chip)", fontsize=11.5, color="#2b2b2b")
-        axes[0].yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: "0" if v == 0 else f"{v / 1000:g}k"))
-        title(fig, "Kimi K3 2.8T Agentic Token Throughput per Chip vs. P90 Interactivity",
-              "One 8× MI355X node. Each line is one submission; labels show the parallelism layout.")
+        dash_axes(ax, xgrid=True)
+        ax.set_xlim(0, 230)
+        ax.set_ylim(0, 18000)
+        taken, curves = [], []
+        for date, color in zip(PROGRESS, REDS):
+            f = frontier(stack(date, "vllm"))
+            for p in f:
+                p["y"] = p["throughput"]
+            draw_curve(ax, f, color, lw=2.4 if color == REDS[-1] else 1.8)
+            curves.append((date, color, f))
+            for p in f:
+                cx, cy = ax.transData.transform((p["interactivity"], p["y"]))
+                r = 8 * fig.dpi / 72
+                taken.append(Bbox.from_extents(cx - r, cy - r, cx + r, cy + r))
+        leg = ax.legend(handles=[Line2D([], [], marker="o", ls="-", lw=2, ms=7, color=c, label=d)
+                                 for d, c, _ in curves],
+                        loc="upper right", fontsize=10.5, frameon=True, facecolor=BG,
+                        edgecolor="#c4c7cc", framealpha=1, borderpad=0.8, labelspacing=0.6,
+                        handlelength=1.6)
+        leg.get_frame().set_boxstyle("round,pad=0.2,rounding_size=0.8")
+        fig.canvas.draw()
+        taken.append(leg.get_window_extent(renderer).expanded(1.03, 1.05))
+        inside = ax.get_window_extent(renderer)
+        for date, color, f in reversed(curves):
+            for p in f:
+                for dx, dy, ha, va in [(0, 9, "center", "bottom"), (0, -10, "center", "top"),
+                                       (10, 3, "left", "bottom"), (-10, 3, "right", "bottom")]:
+                    t = ax.annotate(parallelism_label(p["row"]), (p["interactivity"], p["y"]),
+                                    textcoords="offset points", xytext=(dx, dy), ha=ha, va=va,
+                                    fontsize=7.5, fontweight="bold", color=INK, zorder=6)
+                    bb = t.get_window_extent(renderer).expanded(1.06, 1.25)
+                    if (bb.x0 >= inside.x0 and bb.x1 <= inside.x1 and bb.y0 >= inside.y0
+                            and bb.y1 <= inside.y1 and not any(bb.overlaps(o) for o in taken)):
+                        taken.append(bb)
+                        break
+                    t.remove()
+        ax.set_xlabel("P90 Interactivity (tok/s/user)", fontsize=11.5, color="#2b2b2b")
+        ax.set_ylabel("Token Throughput per Chip (tok/s/chip)", fontsize=11.5, color="#2b2b2b")
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: "0" if v == 0 else f"{v / 1000:g}k"))
+        title(fig, "Kimi K3 2.8T on MI355X (vLLM): Token Throughput per Chip vs. P90 Interactivity",
+              "One 8-GPU node. Each line is one submission; labels show the parallelism layout.")
         fig.savefig(os.path.join(OUT, "mi355x-progress-aug-oct.png"), dpi=150, facecolor=BG)
         plt.close(fig)
 
 
 def fig_timeline():
-    """Figure 4: peak throughput per GPU of every vLLM and ATOM submission."""
+    """Figure 4: peak throughput per GPU of every MI355X vLLM submission."""
     start = _date(2026, 8, 12)
+    runs = []
+    for f in sorted(os.listdir(DATA)):
+        if f.startswith("kimik3_2026-"):
+            pts = stack(f[7:17], "vllm")
+            if pts:
+                runs.append((f[7:17], max(p["throughput"] for p in pts)))
     with plt.rc_context({"font.family": FONT}):
-        fig, ax = plt.subplots(figsize=(12, 5.4), facecolor=BG)
+        fig, ax = plt.subplots(figsize=(12, 5.2), facecolor=BG)
         fig.subplots_adjust(left=0.07, right=0.98, top=0.79, bottom=0.12)
-        dash_axes(ax, xgrid=False)
-        dates_by_fw = {}
-        for f in sorted(os.listdir(DATA)):
-            if not f.startswith("kimik3_2026-"):
-                continue
-            d = f[7:17]
-            for fw in ("vllm", "atom"):
-                pts = stack(d, fw)
-                if pts:
-                    dates_by_fw.setdefault(fw, []).append((d, max(p["throughput"] for p in pts)))
-        handles = []
-        for fw, color, name in [("vllm", "#970004", "vLLM"), ("atom", "#f36358", "ATOM")]:
-            xs = [(_date.fromisoformat(d) - start).days for d, _ in dates_by_fw[fw]]
-            ys = [y for _, y in dates_by_fw[fw]]
-            ax.plot(xs, ys, "-o", color=color, lw=2.2, ms=6.5, mec=BG, mew=1.5, zorder=4)
-            handles.append(Line2D([], [], marker="o", ls="-", lw=2.2, ms=7, color=color, label=name))
-            for i, (x, y) in enumerate(zip(xs, ys)):
-                if i in (0, len(xs) - 1) or y == max(ys):
-                    # ATOM's first point sits just under the vLLM line, so label it below
-                    dy = -15 if (fw == "atom" and i == 0) else 11
-                    ax.annotate(f"{y / 1000:.1f}k", (x, y), textcoords="offset points",
-                                xytext=(0, dy), ha="center", va="center", fontsize=9.5,
-                                fontweight="bold", color=INK, zorder=6,
-                                bbox=dict(boxstyle="square,pad=0.1", fc=BG, ec="none"))
-        leg = ax.legend(handles=handles, loc="upper left", fontsize=11, frameon=True, facecolor=BG,
-                        edgecolor="#c4c7cc", framealpha=1, borderpad=0.8, handlelength=1.8)
-        leg.get_frame().set_boxstyle("round,pad=0.2,rounding_size=0.8")
+        dash_axes(ax)
+        xs = [(_date.fromisoformat(d) - start).days for d, _ in runs]
+        ys = [y for _, y in runs]
+        ax.plot(xs, ys, "-o", color="#970004", lw=2.2, ms=6.5, mec=BG, mew=1.5, zorder=4)
+        for i, (x, y) in enumerate(zip(xs, ys)):
+            if i + 1 < len(xs) and xs[i + 1] - x <= 2:
+                continue  # a run one day later sits on top of this label
+            ax.annotate(f"{y / 1000:.1f}k", (x, y), textcoords="offset points", xytext=(0, 11),
+                        ha="center", va="center", fontsize=9, fontweight="bold", color=INK,
+                        zorder=6, bbox=dict(boxstyle="square,pad=0.1", fc=BG, ec="none"))
         ticks = [_date(2026, 8, 12), _date(2026, 9, 1), _date(2026, 9, 15), _date(2026, 10, 1),
                  _date(2026, 10, 15), _date(2026, 10, 27)]
         ax.set_xticks([(t - start).days for t in ticks])
         ax.set_xticklabels([t.strftime("%b %-d") for t in ticks], fontsize=10)
-        ax.set_xlim(-3, (ticks[-1] - start).days + 12)
-        ax.set_ylim(0, 20000)
-        ax.set_yticks(range(0, 20001, 4000))
+        ax.set_xlim(-3, (ticks[-1] - start).days + 4)
+        ax.set_ylim(0, 18000)
+        ax.set_yticks(range(0, 18001, 3000))
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: "0" if v == 0 else f"{v / 1000:.0f}k"))
         ax.set_ylabel("Peak token throughput per GPU (tok/s)", fontsize=11, color="#2b2b2b")
-        title(fig, "Every MI355X Kimi K3 Submission, Aug 12 to Oct 27",
-              "Peak throughput per GPU of each public InferenceX run, one 8× MI355X node.", y=0.92)
+        title(fig, "Twelve vLLM Runs of Kimi K3 on MI355X, Aug 12 to Oct 27",
+              "Peak throughput per GPU of each public InferenceX run, one 8-GPU node.", y=0.92)
         fig.savefig(os.path.join(OUT, "submission-timeline.png"), dpi=170, facecolor=BG)
         plt.close(fig)
 
