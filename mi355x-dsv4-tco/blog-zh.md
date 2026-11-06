@@ -10,7 +10,7 @@ AgentX 基准和 MoRI UMBP（这项工作底下的 KV cache 层）在我们的[�
 
 ![图 1](figures/tco-frontier-vs-nvidia.png)
 
-*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。虚线圈表示该点开启了 KV offload，MI355X 用的是 MoRI UMBP。表 1 对每个 NVIDIA 系统取最好的框架，所以表中 B300 和 GB300 的峰值比图中曲线更高。*
+*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。虚线圈表示该点开启了 KV offload，MI355X 用的是 MoRI UMBP。*
 
 ## AgentX 与 MoRI UMBP 简介
 
@@ -41,7 +41,7 @@ AgentX 是 SemiAnalysis 用真实的 agentic 编程会话做成的基准，在�
 
 GB200 NVL72 和 GB300 NVL72 是 72 卡的 NVLink 整机柜。和 GB200 比，MI355X 峰值略高（9910 万对 9500 万），120–150 tok/s/用户也更好，GB200 则在 100 tok/s/用户附近领先。GB300 在每个档位都领先，我们最接近的时候是 65 tok/s/用户，达到它每美元 token 数的 0.95 倍。
 
-## 十周六次提交
+## 十周里曲线是怎么变化的
 
 8 月 21 日，我们在 MI355X 上跑了这个模型的第一份完整 AgentX，单卡吞吐峰值 22.9k tokens/s；10 月 28 日，同样的硬件跑到了 79.8k。如果看 70 tok/s/用户的 P90 交互速度，变化更大：单卡从 4.4k 涨到 71.8k tokens/s。图 3 是曲线的变化过程，图 4 跟踪了 8 月 21 日到 10 月 28 日之间的全部六次提交，9 月中旬以后基本一到两周就有一次。每一次都是同一套 MI355X 集群上的公开 InferenceX CI 运行，两次运行之间只改了软件和部署配方。
 
@@ -72,7 +72,7 @@ GB200 NVL72 和 GB300 NVL72 是 72 卡的 NVLink 整机柜。和 GB200 比，MI3
 
 B300 的稠密 FP4 算力比 MI355X 高约三分之一。但在 70 tok/s/用户下，MI355X 单卡跑到 71.8k tok/s，比 B300 的 68.8k 略高，是 B200（49.5k）的 1.45 倍。下面讲的 kernel 工作，很大一部分就是在缩小这个模型实际跑出来的性能和硬件能力之间的差距。
 
-## 提升最大的几项优化
+## 关键优化
 
 以下改动都在公开的 SGLang ROCm 镜像（`lmsysorg/sglang-rocm`）和 [InferenceX 配方](https://github.com/SemiAnalysisAI/InferenceX)里。表 3 列出了实测效果最大的几项，大致按提升从大到小排列。
 

@@ -10,7 +10,7 @@ The AgentX benchmark and MoRI UMBP, the KV cache layer this work runs on, are de
 
 ![Figure 1](figures/tco-frontier-vs-nvidia.png)
 
-*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). Dashed circles mark points with KV offload on; for MI355X that is MoRI UMBP. Table 1 uses each NVIDIA system's best framework, so its B300 and GB300 peaks are higher than the curves shown here.*
+*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). Dashed circles mark points with KV offload on; for MI355X that is MoRI UMBP.*
 
 ## AgentX and MoRI UMBP in brief
 
@@ -41,7 +41,7 @@ MI355X is ahead of B200 and B300 at every level in the table: 1.12–1.85× B200
 
 GB200 NVL72 and GB300 NVL72 are 72-GPU NVLink racks. Against GB200, MI355X has a slightly higher peak (99.1M vs. 95.0M) and is ahead at 120–150 tok/s/user, while GB200 is ahead around 100 tok/s/user. GB300 is ahead at every level. The closest we get is 0.95× of its tokens per dollar, at 65 tok/s/user.
 
-## Six submissions in ten weeks
+## How the curve evolved in ten weeks
 
 Our first full AgentX run for this model on MI355X, on Aug 21, peaked at 22.9k tokens/s per GPU. The Oct 28 run, on the same hardware, peaked at 79.8k. At 70 tok/s/user P90 interactivity the change is larger, from 4.4k to 71.8k tokens/s per GPU. Figure 3 shows how the curve moved, and Figure 4 tracks all six submissions from Aug 21 to Oct 28; after mid-September a new one landed every one to two weeks. Each one is a public InferenceX CI run on the same MI355X cluster, and between runs we changed only software and the deployment recipe.
 
@@ -72,7 +72,7 @@ Memory capacity drove most of our deployment choices. DeepSeek-V4-Pro in FP4 fit
 
 B300 has about a third more dense FP4 compute than MI355X. At 70 tok/s/user, though, MI355X runs at 71.8k tok/s per GPU, a bit more than B300's 68.8k and 1.45× B200's 49.5k. Much of the kernel work described below went into closing the distance between what the hardware can do and what this model was getting from it.
 
-## The optimizations that mattered most
+## Key optimizations
 
 All of the changes below are in the public SGLang ROCm images (`lmsysorg/sglang-rocm`) and the [InferenceX recipes](https://github.com/SemiAnalysisAI/InferenceX). Table 3 lists the ones with the largest measured effect, roughly from biggest to smallest.
 
