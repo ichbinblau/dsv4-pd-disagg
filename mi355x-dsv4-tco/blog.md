@@ -43,7 +43,7 @@ GB200 NVL72 and GB300 NVL72 are 72-GPU NVLink racks. Against GB200, MI355X has a
 
 ## How the curve evolved in ten weeks
 
-Our first full AgentX run for this model on MI355X, on Aug 21, peaked at 22.9k tokens/s per GPU. The Oct 28 run, on the same hardware, peaked at 79.8k. At 70 tok/s/user P90 interactivity the change is larger, from 4.4k to 71.8k tokens/s per GPU. Figure 3 shows how the curve moved, and Figure 4 tracks all six submissions from Aug 21 to Oct 28; after mid-September a new one landed every one to two weeks. Each one is a public InferenceX CI run on the same MI355X cluster, and between runs we changed only software and the deployment recipe.
+Our first full AgentX run for this model on MI355X, on Aug 21, peaked at 22.9k tokens/s per GPU. The Oct 28 run, on the same hardware, peaked at 79.8k. At 70 tok/s/user P90 interactivity the change is larger, from 4.4k to 71.8k tokens/s per GPU. Figure 3 shows how the curve moved, and Figure 4 tracks all six submissions from Aug 21 to Oct 28; after mid-September a new one landed every one to two weeks. Each one is a public InferenceX CI run on the same MI355X cluster.
 
 ![Figure 3](figures/mi355x-progress-aug-oct.png)
 
@@ -105,7 +105,7 @@ In PD disaggregation a request usually waits for decode to bootstrap it before p
 
 ### ROCm 10
 
-Moving the image to ROCm 10 (`v0.5.22-rocm10-mi35x-20261026`) raised P90 interactivity by 6–17% at concurrency 192–512 and throughput at 70 tok/s/user by 9%. At concurrency 512, throughput per GPU went down from 83.7k to 79.8k, which is why the Oct 28 peak is below Oct 21's. Where the two runs cover the same interactivity, the Oct 28 curve is higher at every point.
+Moving the image to ROCm 10 (`v0.5.22-rocm10-mi35x-20261026`) raised P90 interactivity by 6–17% at concurrency 192–512 and throughput at 70 tok/s/user by 9%. At concurrency 512, throughput per GPU dropped slightly, from 83.7k to 79.8k, so ROCm 10 trades a little peak throughput for speed per user. At every interactivity level both builds reach, the ROCm 10 curve is higher.
 
 All of these runs use MoRI for the PD KV transfer and the MoE all-to-all, over standard RoCE between 8-GPU nodes, and MoRI UMBP with the SGLang KVCache Store Linker as a shared, deduplicated DRAM KV pool. The [earlier article](https://www.amd.com/en/developer/resources/technical-articles/2026/mori-umbp-empowers-amd-instinct-gpus.html) goes through both in detail.
 
