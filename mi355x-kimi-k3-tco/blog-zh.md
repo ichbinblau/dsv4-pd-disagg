@@ -10,9 +10,9 @@ Kimi-K3 的 FP4 权重约 1.56 TB，八张 B200 或八张 GB200 都放不下。�
 
 ![图 1](figures/tco-frontier-vs-nvidia.png)
 
-*图 1：Kimi-K3 FP4 在 AgentX 上「每 1 美元 TCO 总 token 数」随 P90 交互速度的变化，Rent – 3 年承诺价格，按 dashboard 的风格用 InferenceX 公开 API 数据绘制（获取于 2026-10-30）。NVIDIA 各系统取已公开框架里最好的一条；MI355X 是一台 8 卡节点，跑 vLLM。点外面有虚线圈，说明这个点开了 KV offload。*
+*图 1：Kimi K3.1 Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」随 P90 交互速度的变化，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3) 截图（更新于 2026-11-09）。每个系统只显示一个框架：GB300 NVL72 为 Dynamo vLLM，GB200 NVL72 为 Dynamo SGLang，B300、B200 和 MI355X 为 vLLM。点外面有虚线圈，说明这个点开了 KV offload。*
 
-## 基准和模型
+## 这个负载贵在哪里
 
 SemiAnalysis 的 AgentX 基准在公开的 InferenceX CI 上运行，按轮次回放录下来的 agentic 编程会话，每一步都把越来越长的上下文重新发给模型。一个会话平均约 43 轮，一轮通常发出 142K token、拿回 444 token，每个 prompt 里超过 96% 的内容服务端之前已经见过。
 
@@ -43,7 +43,7 @@ Kimi-K3 有 2.8T 参数、896 个专家，原生上下文 1M token。一部分�
 
 GB300 NVL72 是例外。从 40 tok/s/用户往上，它的每美元 token 数更高，MI355X 只有它的 0.63–0.87 倍；GB300 这些点用的是 NVLink 机柜内 24 到 40 卡的宽 EP 分离式部署。在低交互速度那一端，MI355X 的峰值是 20.5 tok/s/用户时的 1970 万，略高于 GB300 的 1910 万。
 
-## 十一周、十二次提交
+## 同样八张卡，吞吐提升 4.2 倍
 
 8 月 12 日，vLLM 在 MI355X 上提交了第一份 Kimi-K3 AgentX，比 NVIDIA 的第一份结果晚两周，单卡峰值 3.8k tokens/s。到 10 月 27 日，峰值是 15.9k。中等交互速度下变化更大：40 tok/s/用户时，单卡吞吐从 2.1k 涨到 13.1k tokens/s；单用户速度从 61 升到 212 tok/s/用户。图 3 画了十二次运行中的四次，图 4 是每一次的峰值。这些运行都在公开的 InferenceX CI 上完成，每个服务实例用一台 8 卡 MI355X 节点。
 
@@ -108,7 +108,7 @@ vLLM 用 DSpark head 生成草稿，草稿长度按并发定：并发 1 用 7 �
 
 ## 致谢
 
-感谢 Moonshot AI 和 vLLM 社区，感谢 Inferact 提供 DSpark draft 模型，感谢 SemiAnalysis 运行 AgentX 和 InferenceX CI，也感谢 AMD AITER、FlyDSL、vLLM 和 ROCm 团队。
+感谢 Moonshot AI 和 vLLM 社区，感谢 Inferact 提供 DSpark draft 模型，感谢 SemiAnalysis 运行 AgentX 和 InferenceX CI，也感谢 AMD AITER、vLLM 和 ROCm 团队。
 
 ## 参考资料
 

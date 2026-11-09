@@ -369,7 +369,7 @@ def tables(tiers):
 
 
 if __name__ == "__main__":
-    fig_tco_frontier()
+    # Figure 1 is now a dashboard screenshot; fig_tco_frontier() would overwrite it.
     fig_iso_ratio([25, 30, 40, 60, 80, 100])
     fig_progress()
     fig_timeline()

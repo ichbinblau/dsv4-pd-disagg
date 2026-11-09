@@ -10,9 +10,9 @@ Below we compare the node with NVIDIA's Blackwell systems, follow the runs over 
 
 ![Figure 1](figures/tco-frontier-vs-nvidia.png)
 
-*Figure 1: Total tokens per $1 TCO against P90 interactivity for Kimi-K3 FP4 on AgentX, Rent – 3-year commit pricing, drawn in the dashboard's style from the InferenceX public API (retrieved 2026-10-30). NVIDIA curves use each system's best published framework; MI355X is one 8-GPU node with vLLM. A dashed ring means KV offload was on for that point.*
+*Figure 1: Kimi K3.1 Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3) (updated 2026-11-09). One framework is shown per system: GB300 NVL72 on Dynamo vLLM, GB200 NVL72 on Dynamo SGLang, and B300, B200 and MI355X on vLLM. A dashed ring means KV offload was on for that point.*
 
-## The benchmark and the model
+## What makes this workload expensive
 
 SemiAnalysis's AgentX benchmark runs in the public InferenceX CI and replays recorded agentic coding sessions turn by turn, sending the growing context back to the model at each step. Sessions average about 43 turns. A typical turn sends 142K tokens and gets 444 back, and the server has already seen more than 96% of each prompt.
 
@@ -43,7 +43,7 @@ B200, B300 and GB200 NVL72 trail MI355X at every level in the table, by 1.9–2.
 
 GB300 NVL72 is the exception. From 40 tok/s/user up it gets more tokens per dollar, with MI355X at 0.63–0.87× of it, using disaggregated wide-EP setups of 24 to 40 GPUs within the NVLink rack. At the low-interactivity end the MI355X peak, 19.7M at 20.5 tok/s/user, edges past GB300's 19.1M.
 
-## Twelve runs in eleven weeks
+## Same eight GPUs, 4.2× the throughput
 
 The first vLLM run of Kimi-K3 AgentX on MI355X went in on Aug 12, two weeks after the first NVIDIA result, and peaked at 3.8k tokens/s per GPU. By Oct 27 the peak was 15.9k. The gain is bigger at moderate interactivity: at 40 tok/s/user, throughput went from 2.1k to 13.1k tokens/s per GPU, and single-user speed went from 61 to 212 tok/s/user. Figure 3 shows four of the twelve runs and Figure 4 shows the peak of every one. All of them ran in the public InferenceX CI, with one 8-GPU MI355X node per server.
 
@@ -108,7 +108,7 @@ In one run the slowest 10% of decode steps all fell in the largest batches. Capp
 
 ## Acknowledgements
 
-We thank Moonshot AI and the vLLM community, Inferact for the DSpark draft model, SemiAnalysis for running AgentX and the InferenceX CI, and the AMD AITER, FlyDSL, vLLM and ROCm teams.
+We thank Moonshot AI and the vLLM community, Inferact for the DSpark draft model, SemiAnalysis for running AgentX and the InferenceX CI, and the AMD AITER, vLLM and ROCm teams.
 
 ## References
 
