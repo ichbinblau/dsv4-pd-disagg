@@ -1,20 +1,20 @@
-# AMD Instinct™ MI355X on Agentic Inference: DeepSeek-V4-Pro and Kimi-K3 at Up to 2.6× the Tokens per Dollar of B200
+# AMD Instinct™ MI355X on Agentic Inference: DeepSeek-V4-Pro and Kimi-K3 at Up to 2.4× the Tokens per Dollar of B200
 
 *November 2026*
 
-Since August we have been running two large MoE models on AMD Instinct MI355X in SemiAnalysis's public AgentX benchmark: DeepSeek-V4-Pro (1.6T) on SGLang with MoRI, and Kimi-K3 (2.8T) on vLLM. On both, MI355X now gets more tokens per dollar than B200 and B300 at every interactivity level where they have published results. On DeepSeek-V4-Pro the lead goes up to 1.85× over B200 and 2.26× over B300. On Kimi-K3 it is 1.9–2.6× over B200 and 2.0–2.8× over B300, MI355X also leads GB200 NVL72 by 1.3–2.0×, and its peak tokens per dollar is the highest on the dashboard.
+Since August we have been running two large MoE models on AMD Instinct MI355X in SemiAnalysis's public AgentX benchmark: DeepSeek-V4-Pro (1.6T) on SGLang with MoRI, and Kimi-K3 (2.8T) on vLLM. On both, MI355X now gets more tokens per dollar than B200 and B300 across nearly all of the interactivity range where they overlap; the one exception is DeepSeek-V4-Pro at the single-user end, above about 220 tok/s/user. In the comparisons below, the lead on DeepSeek-V4-Pro goes up to 1.85× over B200 and 2.26× over B300. On Kimi-K3 it is 1.9–2.4× over B200 and 1.8–2.8× over B300, MI355X also leads GB200 NVL72 by 1.2–1.9×, and its peak tokens per dollar is the highest on the dashboard.
 
 ![Figure 1](figures/dsv4-tco-frontier.png)
 
-*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). For MI355X, KV offload is MoRI UMBP.*
+*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). For MI355X, KV offload is MoRI UMBP. Table 2 uses each NVIDIA system's best framework, so its B300 and GB300 peaks (82.7M on SGLang, 112.8M on Dynamo vLLM) are higher than the curves shown here.*
 
 ![Figure 2](figures/k3-tco-frontier.png)
 
-*Figure 2: Kimi K3.1 Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3) (updated 2026-11-09). One framework is shown per system: GB300 NVL72 on Dynamo vLLM, GB200 NVL72 on Dynamo SGLang, and B300, B200 and MI355X on vLLM. Dashed circles mark points with KV offload on.*
+*Figure 2: Kimi-K3 FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3) (updated 2026-10-27). One framework is shown per system: GB300 NVL72, GB200 NVL72 and B200 on Dynamo vLLM, and B300 and MI355X on vLLM. Dashed circles mark points with KV offload on.*
 
 Most of that lead came from software: on the same hardware, peak throughput per GPU rose 3.5× on DeepSeek-V4-Pro and 4.2× on Kimi-K3 between August and October.
 
-First we look at the benchmark and the MI355X hardware. Then, for each model, we compare MI355X with NVIDIA's GPUs, show how the results improved over ten weeks, and explain which changes made the difference.
+First we look at the benchmark and the MI355X hardware. Then, for each model, we compare MI355X with NVIDIA's GPUs, show how the results improved since August, and explain which changes made the difference.
 
 ## The workload and the hardware
 
@@ -33,7 +33,7 @@ For the hardware, what matters most is that these long contexts come back turn a
 
 That capacity drove most of our deployment choices for both models. DeepSeek-V4-Pro in FP4 fits on four MI355X GPUs with space left for KV cache, so its recipe uses TP4 prefill at concurrency 16–48 and TP4 + TP4 at concurrency 1, where every published B200 AgentX recipe uses eight GPUs per role. Kimi-K3's MXFP4 weights are about 1.56 TB. At TP8 that is about 195 GB per MI355X, so the whole model runs on one 8-GPU node. Eight B200s (1.44 TB) or eight GB200s (1.49 TB) cannot hold the weights, and the published configurations for both spread the model over two nodes with pipeline parallelism.
 
-Compute is a different story. B300 has about a third more dense FP4 than MI355X, yet on DeepSeek-V4-Pro at 70 tok/s/user MI355X runs at 71.8k tok/s per GPU against B300's 68.8k. On Kimi-K3 at 40 tok/s/user it delivers 1.69× B200's throughput per GPU with only 12% more FP4. Closing the distance between what the hardware can do and what each model was getting from it is what most of the work below was about.
+Compute is a different story. B300 has about a third more dense FP4 than MI355X, yet on DeepSeek-V4-Pro at 70 tok/s/user MI355X runs at 71.8k tok/s per GPU against B300's 68.8k. On Kimi-K3 at 40 tok/s/user it delivers 1.66× B200's throughput per GPU with only 12% more FP4. Closing the distance between what the hardware can do and what each model was getting from it is what most of the work below was about.
 
 ## DeepSeek-V4-Pro on SGLang with MoRI UMBP
 
@@ -104,10 +104,10 @@ Table 4 and Figure 6, along with Figure 2 at the top of this post, put that sing
 | P90 interactivity | MI355X | B200 | B300¹ | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|
 | 25 tok/s/user | 19.1 | 9.9 (1.92×) | 7.1 (2.71×) | 9.8 (1.94×) | — |
-| 40 tok/s/user | 16.5 | 7.7 (2.16×) | 5.8 (2.84×) | 8.4 (1.97×) | 18.9 (0.87×) |
-| 60 tok/s/user | 10.9 | 4.9 (2.22×) | 4.6 (2.38×) | 7.1 (1.54×) | 17.2 (0.63×) |
-| 80 tok/s/user | 8.4 | 3.4 (2.46×) | 3.8 (2.22×) | 6.6 (1.28×) | 12.1 (0.70×) |
-| 100 tok/s/user | 6.7 | 2.6 (2.59×) | 3.4 (1.96×) | 5.2 (1.30×) | 9.1 (0.74×) |
+| 40 tok/s/user | 16.2 | 7.7 (2.12×) | 5.8 (2.79×) | 8.4 (1.93×) | 18.9 (0.86×) |
+| 60 tok/s/user | 10.9 | 4.9 (2.22×) | 4.6 (2.38×) | 7.1 (1.53×) | 17.2 (0.63×) |
+| 80 tok/s/user | 8.3 | 3.4 (2.41×) | 3.8 (2.17×) | 6.6 (1.26×) | 12.1 (0.68×) |
+| 100 tok/s/user | 6.2 | 2.6 (2.37×) | 3.4 (1.80×) | 5.2 (1.19×) | 9.1 (0.68×) |
 | Peak | 19.7 | 10.4 (1.89×) | 10.6 (1.86×) | 9.9 (1.99×) | 19.1 (1.03×) |
 
 ¹ B300's latest published Kimi-K3 results are from 2026-08-16; everything else was measured in October.
@@ -116,9 +116,9 @@ Table 4 and Figure 6, along with Figure 2 at the top of this post, put that sing
 
 *Figure 6: Kimi-K3, MI355X tokens per dollar over each NVIDIA system's at the same P90 interactivity (Rent tier). Bars above 1.0 mean a lower cost per token on MI355X.*
 
-B200, B300 and GB200 NVL72 trail MI355X at every level in Table 4, by 1.9–2.6×, 2.0–2.8× and 1.3–2.0×. Against B200 the gap here is mainly throughput, not price: one MI355X GPU does 1.5–2.0× the work of one B200 over this range, 13.3k against 7.9k tokens/s at 40 tok/s/user. Against GB200 it does about 1.4× the work at 25–40 tok/s/user. Owning-tier prices narrow the lead a little, to 1.7–2.3× over B200 and 1.2–1.8× over GB200.
+B200, B300 and GB200 NVL72 trail MI355X at every level in Table 4, by 1.9–2.4×, 1.8–2.8× and 1.2–1.9×. Against B200 the gap here is mainly throughput, not price: one MI355X GPU does 1.5–1.9× the work of one B200 over this range, 13.1k against 7.9k tokens/s at 40 tok/s/user. Against GB200 it does about 1.4× the work at 25–40 tok/s/user. Owning-tier prices narrow the lead a little, to 1.7–2.2× over B200 and 1.1–1.7× over GB200.
 
-GB300 NVL72 is the exception again. From 40 tok/s/user up it gets more tokens per dollar, with MI355X at 0.63–0.87× of it, using disaggregated wide-EP setups of 24 to 40 GPUs within the NVLink rack. At the low-interactivity end the MI355X peak, 19.7M at 20.5 tok/s/user, edges past GB300's 19.1M.
+GB300 NVL72 is the exception again. From 40 tok/s/user up it gets more tokens per dollar, with MI355X at 0.63–0.86× of it, using disaggregated wide-EP setups of 24 to 40 GPUs within the NVLink rack. At the low-interactivity end the MI355X peak, 19.7M at 20.5 tok/s/user, edges past GB300's 19.1M.
 
 ### Same eight GPUs, 4.2× the throughput
 

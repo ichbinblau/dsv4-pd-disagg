@@ -1,20 +1,20 @@
-# AMD Instinct™ MI355X 跑智能体推理：DeepSeek-V4-Pro 和 Kimi-K3 每美元 token 产出最高达 B200 的 2.6 倍
+# AMD Instinct™ MI355X 跑智能体推理：DeepSeek-V4-Pro 和 Kimi-K3 每美元 token 产出最高达 B200 的 2.4 倍
 
 *2026 年 11 月*
 
-从 8 月开始，我们在 SemiAnalysis 公开的 AgentX 基准上，用 AMD Instinct MI355X 跑两个大型 MoE 模型：用 SGLang 加 MoRI 跑 DeepSeek-V4-Pro（1.6T），用 vLLM 跑 Kimi-K3（2.8T）。两个模型上，只要是 B200 和 B300 有公开结果的交互速度档位，MI355X 的每美元 token 产出都比它们高。DeepSeek-V4-Pro 上最多是 B200 的 1.85 倍、B300 的 2.26 倍。Kimi-K3 上是 B200 的 1.9–2.6 倍、B300 的 2.0–2.8 倍，对 GB200 NVL72 也领先 1.3–2.0 倍，每美元 token 数峰值在 dashboard 上最高。
+从 8 月开始，我们在 SemiAnalysis 公开的 AgentX 基准上，用 AMD Instinct MI355X 跑两个大型 MoE 模型：用 SGLang 加 MoRI 跑 DeepSeek-V4-Pro（1.6T），用 vLLM 跑 Kimi-K3（2.8T）。两个模型上，在和 B200、B300 重叠的交互速度范围里，MI355X 的每美元 token 产出几乎处处更高，唯一的例外是 DeepSeek-V4-Pro 在单用户那一端（约 220 tok/s/用户以上）。在下文的对比中，DeepSeek-V4-Pro 上最多是 B200 的 1.85 倍、B300 的 2.26 倍。Kimi-K3 上是 B200 的 1.9–2.4 倍、B300 的 1.8–2.8 倍，对 GB200 NVL72 也领先 1.2–1.9 倍，每美元 token 数峰值在 dashboard 上最高。
 
 ![图 1](figures/dsv4-tco-frontier.png)
 
-*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。MI355X 的 KV offload 用的是 MoRI UMBP。*
+*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。MI355X 的 KV offload 用的是 MoRI UMBP。表 2 对每个 NVIDIA 系统取最好的框架，所以表中 B300 和 GB300 的峰值（分别是 SGLang 的 8270 万和 Dynamo vLLM 的 1.128 亿）比图中曲线更高。*
 
 ![图 2](figures/k3-tco-frontier.png)
 
-*图 2：Kimi K3.1 Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3) 截图（更新于 2026-11-09）。每个系统只显示一个框架：GB300 NVL72 为 Dynamo vLLM，GB200 NVL72 为 Dynamo SGLang，B300、B200 和 MI355X 为 vLLM。虚线圈表示该点开启了 KV offload。*
+*图 2：Kimi-K3 FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/kimi-k3) 截图（更新于 2026-10-27）。每个系统只显示一个框架：GB300 NVL72、GB200 NVL72 和 B200 为 Dynamo vLLM，B300 和 MI355X 为 vLLM。虚线圈表示该点开启了 KV offload。*
 
 领先的大部分来自软件：硬件没换，8 月到 10 月，DeepSeek-V4-Pro 的单卡吞吐峰值提升了 3.5 倍，Kimi-K3 提升了 4.2 倍。
 
-下面先介绍这个基准和 MI355X 的硬件，然后逐个模型来看：MI355X 和 NVIDIA 的 GPU 比起来怎么样，十周里结果是怎么提升的，以及是哪些改动带来了提升。
+下面先介绍这个基准和 MI355X 的硬件，然后逐个模型来看：MI355X 和 NVIDIA 的 GPU 比起来怎么样，8 月以来结果是怎么提升的，以及是哪些改动带来了提升。
 
 ## 负载与硬件
 
@@ -33,7 +33,7 @@ AgentX 是 SemiAnalysis 用真实的 agentic 编程会话做成的基准，在�
 
 两个模型的部署选择，大多就是由这块显存决定的。FP4 的 DeepSeek-V4-Pro 放进四张 MI355X 还能剩下空间给 KV cache，所以配方在并发 16–48 用 TP4 prefill，在并发 1 用 TP4 + TP4；而 B200 已公开的 AgentX 配方，每个角色都是八张卡。Kimi-K3 的 MXFP4 权重约 1.56 TB，TP8 下每张 MI355X 约 195 GB，整个模型一台 8 卡节点就能跑。八张 B200（1.44 TB）或八张 GB200（1.49 TB）连权重都放不下，两者已公开的配置都把模型拆到两台节点上，用流水线并行来跑。
 
-算力是另一回事。B300 的稠密 FP4 比 MI355X 高约三分之一，但在 DeepSeek-V4-Pro 70 tok/s/用户下，MI355X 单卡跑到 71.8k tok/s，B300 是 68.8k。Kimi-K3 在 40 tok/s/用户下，MI355X 的单卡吞吐是 B200 的 1.69 倍，而 FP4 算力只高 12%。下面的大部分工作，就是在缩小两个模型实际跑出来的性能和硬件能力之间的差距。
+算力是另一回事。B300 的稠密 FP4 比 MI355X 高约三分之一，但在 DeepSeek-V4-Pro 70 tok/s/用户下，MI355X 单卡跑到 71.8k tok/s，B300 是 68.8k。Kimi-K3 在 40 tok/s/用户下，MI355X 的单卡吞吐是 B200 的 1.66 倍，而 FP4 算力只高 12%。下面的大部分工作，就是在缩小两个模型实际跑出来的性能和硬件能力之间的差距。
 
 ## DeepSeek-V4-Pro：SGLang 加 MoRI UMBP
 
@@ -104,10 +104,10 @@ MI355X 的显存优势，在 Kimi-K3 上体现得最明显。这个模型有 2.8
 | P90 交互速度 | MI355X | B200 | B300¹ | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|
 | 25 tok/s/用户 | 19.1 | 9.9 (1.92×) | 7.1 (2.71×) | 9.8 (1.94×) | — |
-| 40 tok/s/用户 | 16.5 | 7.7 (2.16×) | 5.8 (2.84×) | 8.4 (1.97×) | 18.9 (0.87×) |
-| 60 tok/s/用户 | 10.9 | 4.9 (2.22×) | 4.6 (2.38×) | 7.1 (1.54×) | 17.2 (0.63×) |
-| 80 tok/s/用户 | 8.4 | 3.4 (2.46×) | 3.8 (2.22×) | 6.6 (1.28×) | 12.1 (0.70×) |
-| 100 tok/s/用户 | 6.7 | 2.6 (2.59×) | 3.4 (1.96×) | 5.2 (1.30×) | 9.1 (0.74×) |
+| 40 tok/s/用户 | 16.2 | 7.7 (2.12×) | 5.8 (2.79×) | 8.4 (1.93×) | 18.9 (0.86×) |
+| 60 tok/s/用户 | 10.9 | 4.9 (2.22×) | 4.6 (2.38×) | 7.1 (1.53×) | 17.2 (0.63×) |
+| 80 tok/s/用户 | 8.3 | 3.4 (2.41×) | 3.8 (2.17×) | 6.6 (1.26×) | 12.1 (0.68×) |
+| 100 tok/s/用户 | 6.2 | 2.6 (2.37×) | 3.4 (1.80×) | 5.2 (1.19×) | 9.1 (0.68×) |
 | 峰值 | 19.7 | 10.4 (1.89×) | 10.6 (1.86×) | 9.9 (1.99×) | 19.1 (1.03×) |
 
 ¹ B300 最新公开的 Kimi-K3 结果是 2026-08-16 的，其余都是 10 月测的。
@@ -116,9 +116,9 @@ MI355X 的显存优势，在 Kimi-K3 上体现得最明显。这个模型有 2.8
 
 *图 6：Kimi-K3，相同 P90 交互速度下 MI355X 每美元 token 数除以各 NVIDIA 系统的（Rent 档位）。柱子高过 1.0，说明 MI355X 每 token 更便宜。*
 
-在表 4 的每一档，B200、B300 和 GB200 NVL72 都落后于 MI355X，差距分别是 1.9–2.6 倍、2.0–2.8 倍和 1.3–2.0 倍。这里和 B200 的差距主要来自吞吐，而不是价格：在这个范围内，一张 MI355X 干的活是一张 B200 的 1.5–2.0 倍，40 tok/s/用户时是 13.3k 对 7.9k tokens/s。和 GB200 比，在 25–40 tok/s/用户大约是 1.4 倍。换成 Owning 档位的价格，领先幅度略有收窄，对 B200 是 1.7–2.3 倍，对 GB200 是 1.2–1.8 倍。
+在表 4 的每一档，B200、B300 和 GB200 NVL72 都落后于 MI355X，差距分别是 1.9–2.4 倍、1.8–2.8 倍和 1.2–1.9 倍。这里和 B200 的差距主要来自吞吐，而不是价格：在这个范围内，一张 MI355X 干的活是一张 B200 的 1.5–1.9 倍，40 tok/s/用户时是 13.1k 对 7.9k tokens/s。和 GB200 比，在 25–40 tok/s/用户大约是 1.4 倍。换成 Owning 档位的价格，领先幅度略有收窄，对 B200 是 1.7–2.2 倍，对 GB200 是 1.1–1.7 倍。
 
-GB300 NVL72 又是例外。从 40 tok/s/用户往上，它的每美元 token 数更高，MI355X 只有它的 0.63–0.87 倍；GB300 这些点用的是 NVLink 机柜内 24 到 40 卡的宽 EP 分离式部署。在低交互速度那一端，MI355X 的峰值是 20.5 tok/s/用户时的 1970 万，略高于 GB300 的 1910 万。
+GB300 NVL72 又是例外。从 40 tok/s/用户往上，它的每美元 token 数更高，MI355X 只有它的 0.63–0.86 倍；GB300 这些点用的是 NVLink 机柜内 24 到 40 卡的宽 EP 分离式部署。在低交互速度那一端，MI355X 的峰值是 20.5 tok/s/用户时的 1970 万，略高于 GB300 的 1910 万。
 
 ### 同样八张卡，吞吐提升 4.2 倍
 
