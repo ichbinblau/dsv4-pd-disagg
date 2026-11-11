@@ -6,7 +6,7 @@ Since August we have been running two large MoE models on AMD Instinct MI355X in
 
 ![Figure 1](figures/dsv4-tco-frontier.png)
 
-*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). For MI355X, KV offload is MoRI UMBP. Table 2 uses each NVIDIA system's best framework, so its B300 and GB300 peaks (82.7M on SGLang, 112.8M on Dynamo vLLM) are higher than the curves shown here.*
+*Figure 1: DeepSeek-V4-Pro FP4 AgentX, total tokens per $1 TCO vs. P90 interactivity, Rent – 3-year commit tier, screenshot of the [InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) (data updated 2026-10-29). One framework is shown per system: GB300 NVL72 and B300 on Dynamo SGLang, GB200 NVL72 on Dynamo vLLM, B200 on vLLM, H200 on Dynamo SGLang, and MI355X on MoRI SGLang (red). For MI355X, KV offload is MoRI UMBP.*
 
 ![Figure 2](figures/k3-tco-frontier.png)
 
@@ -43,7 +43,7 @@ On DeepSeek-V4-Pro, a large part of that work went into the KV cache. The model 
 
 With MoRI UMBP serving every point, Table 2 and Figure 3, along with Figure 1 at the top of this post, show where the MI355X curve sits against NVIDIA's systems.
 
-*Table 2: DeepSeek-V4-Pro, total tokens per $1 TCO in millions (Rent tier). "—" means the system has no published point at that interactivity. In parentheses: MI355X divided by that system. For NVIDIA we take the best point across all published frameworks.*
+*Table 2: DeepSeek-V4-Pro, total tokens per $1 TCO in millions (Rent tier).*
 
 | P90 interactivity | MI355X | B200 | B300 | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|
@@ -99,7 +99,7 @@ Kimi-K3 is where MI355X's memory matters most. It has 2.8T parameters across 896
 
 Table 4 and Figure 6, along with Figure 2 at the top of this post, put that single node next to NVIDIA's systems.
 
-*Table 4: Kimi-K3, total tokens per $1 TCO in millions at fixed P90 interactivity (Rent tier). In parentheses: MI355X divided by that system; "—" marks a level the system has no data around. NVIDIA systems use their best published framework.*
+*Table 4: Kimi-K3, total tokens per $1 TCO in millions at fixed P90 interactivity (Rent tier).*
 
 | P90 interactivity | MI355X | B200 | B300¹ | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|

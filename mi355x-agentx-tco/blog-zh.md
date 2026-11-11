@@ -6,7 +6,7 @@
 
 ![图 1](figures/dsv4-tco-frontier.png)
 
-*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。MI355X 的 KV offload 用的是 MoRI UMBP。表 2 对每个 NVIDIA 系统取最好的框架，所以表中 B300 和 GB300 的峰值（分别是 SGLang 的 8270 万和 Dynamo vLLM 的 1.128 亿）比图中曲线更高。*
+*图 1：DeepSeek-V4-Pro FP4 AgentX，「每 1 美元 TCO 总 token 数」vs.「P90 交互速度」，Rent – 3 年承诺档位，[InferenceX dashboard](https://inferencex.semianalysis.com/inference/deepseek-v4) 截图（数据更新于 2026-10-29）。每个系统只显示一个框架：GB300 NVL72 和 B300 为 Dynamo SGLang，GB200 NVL72 为 Dynamo vLLM，B200 为 vLLM，H200 为 Dynamo SGLang，MI355X 为 MoRI SGLang（红色）。MI355X 的 KV offload 用的是 MoRI UMBP。*
 
 ![图 2](figures/k3-tco-frontier.png)
 
@@ -43,7 +43,7 @@ DeepSeek-V4-Pro 上，这部分工作很大一块落在 KV cache 上。这个模
 
 所有点都由 MoRI UMBP 服务之后，MI355X 的曲线相对 NVIDIA 各系统处在什么位置，见表 2、图 3 和文章开头的图 1。
 
-*表 2：DeepSeek-V4-Pro，每 1 美元 TCO 总 token 数（百万，Rent 档位）。「—」表示该系统在这个交互速度没有公开数据点；括号内是 MI355X 与该系统之比。NVIDIA 各系统取所有已公开框架里的最好点。*
+*表 2：DeepSeek-V4-Pro，每 1 美元 TCO 总 token 数（百万，Rent 档位）。*
 
 | P90 交互速度 | MI355X | B200 | B300 | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|
@@ -99,7 +99,7 @@ MI355X 的显存优势，在 Kimi-K3 上体现得最明显。这个模型有 2.8
 
 表 4、图 6 和文章开头的图 2 把这台单节点的 MI355X 和 NVIDIA 各系统放在一起比较。
 
-*表 4：Kimi-K3，固定 P90 交互速度下每 1 美元 TCO 的 token 数（百万，Rent 档位）。括号里是 MI355X 与该系统之比；「—」表示该系统在这一档附近没有数据。NVIDIA 各系统取已公开框架里最好的结果。*
+*表 4：Kimi-K3，固定 P90 交互速度下每 1 美元 TCO 的 token 数（百万，Rent 档位）。*
 
 | P90 交互速度 | MI355X | B200 | B300¹ | GB200 NVL72 | GB300 NVL72 |
 |---|---|---|---|---|---|
